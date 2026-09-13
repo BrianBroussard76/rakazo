@@ -263,13 +263,29 @@ export function ensureAutonomousPromotedGoalNotes(
   notes: string,
   now: Date = new Date(),
 ): string {
-  if (isAutonomousGoalNotes(notes) && metadataValue(notes, "autonomousAt")) {
-    return notes.length <= SCRATCHPAD_NOTES_MAX ? notes : notes.slice(0, SCRATCHPAD_NOTES_MAX);
+  let next = notes;
+  if (itemId !== "pending" && notes.includes("sourceIdeaId=pending")) {
+    next = notes.replaceAll("sourceIdeaId=pending", `sourceIdeaId=${itemId}`);
+    // UUID is longer than "pending"; rebuild so lineage markers stay within the notes max.
+    if (next.length > SCRATCHPAD_NOTES_MAX) {
+      return buildAutonomousPromotedGoalNotes(itemId, visibleWorkNotes(notes), now);
+    }
   }
-  if (isAutonomousGoalNotes(notes)) {
-    return appendLineageNotes(notes, [`autonomousAt=${now.toISOString()}`]);
+
+  if (isAutonomousGoalNotes(next) && metadataValue(next, "autonomousAt")) {
+    if (!metadataValue(next, "sourceIdeaId") && itemId !== "pending") {
+      next = appendLineageNotes(next, [`sourceIdeaId=${itemId}`]);
+    }
+    return next.length <= SCRATCHPAD_NOTES_MAX ? next : next.slice(0, SCRATCHPAD_NOTES_MAX);
   }
-  return buildAutonomousPromotedGoalNotes(itemId, notes, now);
+  if (isAutonomousGoalNotes(next)) {
+    const lineage = [`autonomousAt=${now.toISOString()}`];
+    if (!metadataValue(next, "sourceIdeaId") && itemId !== "pending") {
+      lineage.unshift(`sourceIdeaId=${itemId}`);
+    }
+    return appendLineageNotes(next, lineage);
+  }
+  return buildAutonomousPromotedGoalNotes(itemId, next, now);
 }
 
 export function autonomyLimitError(args: {

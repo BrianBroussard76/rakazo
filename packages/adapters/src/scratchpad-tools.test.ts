@@ -37,7 +37,7 @@ describe("scratchpad tools store", () => {
   it("adds an item with trimmed title and default open status", async () => {
     const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
       row({
-        id: "new",
+        id: String(data.id ?? "new"),
         title: String(data.title),
         status: String(data.status),
         notes: String(data.notes),
@@ -58,6 +58,7 @@ describe("scratchpad tools store", () => {
 
     expect(create).toHaveBeenCalledWith({
       data: {
+        id: expect.any(String),
         spaceId: "ws",
         botId: "bot",
         userId: "user",
@@ -67,7 +68,11 @@ describe("scratchpad tools store", () => {
       },
     });
     expect(result).toEqual({
-      item: expect.objectContaining({ id: "new", title: "Ship PR", status: "open" }),
+      item: expect.objectContaining({
+        id: expect.any(String),
+        title: "Ship PR",
+        status: "open",
+      }),
     });
   });
 
@@ -237,6 +242,89 @@ describe("scratchpad tools store", () => {
     );
 
     expect(result).toEqual({ error: "Autonomy goal chain depth limit is 2." });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("creates autonomous goals with a real sourceIdeaId in one insert", async () => {
+    const create = vi.fn(async ({ data }: { data: Record<string, unknown> }) =>
+      row({
+        id: String(data.id),
+        title: String(data.title),
+        status: String(data.status),
+        notes: String(data.notes),
+      }),
+    );
+    const update = vi.fn();
+    const prisma = {
+      routine: {
+        findMany: vi.fn(async () => [
+          { prompt: autonomyPrompt({ maxGoalsPerDay: 3, maxChainDepth: 2 }) },
+        ]),
+      },
+      scratchpadItem: {
+        findMany: vi.fn(async () => []),
+        create,
+        update,
+      },
+    };
+
+    const result = await addScratchpadItemFromTool(
+      { prisma: prisma as never },
+      {
+        spaceId: "ws",
+        botId: "bot",
+        userId: "user",
+        title: "Ship voice preview",
+        status: "open",
+        notes: AUTONOMOUS_GOAL_MARKER,
+      },
+    );
+
+    expect(update).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledTimes(1);
+    const data = create.mock.calls[0]![0]!.data as Record<string, unknown>;
+    expect(data.id).toEqual(expect.any(String));
+    expect(String(data.notes)).toContain(`sourceIdeaId=${data.id}`);
+    expect(String(data.notes)).not.toContain("sourceIdeaId=pending");
+    expect(result).toEqual({
+      item: expect.objectContaining({
+        id: data.id,
+        notes: expect.stringContaining(`sourceIdeaId=${data.id}`),
+      }),
+    });
+  });
+
+  it("refuses oversized notes without inserting a pending autonomous goal", async () => {
+    const create = vi.fn();
+    const update = vi.fn();
+    const prisma = {
+      routine: {
+        findMany: vi.fn(async () => [
+          { prompt: autonomyPrompt({ maxGoalsPerDay: 3, maxChainDepth: 2 }) },
+        ]),
+      },
+      scratchpadItem: {
+        findMany: vi.fn(async () => []),
+        create,
+        update,
+      },
+    };
+
+    const result = await addScratchpadItemFromTool(
+      { prisma: prisma as never },
+      {
+        spaceId: "ws",
+        botId: "bot",
+        userId: "user",
+        title: "Too large",
+        status: "open",
+        notes: `${AUTONOMOUS_GOAL_MARKER}
+${"x".repeat(4_001)}`,
+      },
+    );
+
+    expect(result).toEqual({ error: "notes must be at most 4000 characters." });
+    expect(create).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
 

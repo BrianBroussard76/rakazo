@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   AUTONOMOUS_GOAL_MARKER,
   type AutonomyLimits,
@@ -152,7 +153,7 @@ async function refuseOrNormalizeAutonomousGoal(
   });
   if (error) return { error };
 
-  // For creates the row id is not known yet; stamp a temporary id then rewrite after insert.
+  // Creates allocate the row id before insert so lineage can use the real id in one write.
   return {
     notes: ensureAutonomousPromotedGoalNotes(input.itemId ?? "pending", input.notes, now),
   };
@@ -183,9 +184,11 @@ export async function addScratchpadItemFromTool(
     status = input.status;
   }
 
+  const itemId = randomUUID();
   const gated = await refuseOrNormalizeAutonomousGoal(deps, {
     spaceId: input.spaceId,
     botId: input.botId,
+    itemId,
     title,
     status,
     notes,
@@ -196,6 +199,7 @@ export async function addScratchpadItemFromTool(
 
   const row = await deps.prisma.scratchpadItem.create({
     data: {
+      id: itemId,
       spaceId: input.spaceId,
       botId: input.botId,
       userId: input.userId,
@@ -204,17 +208,6 @@ export async function addScratchpadItemFromTool(
       notes,
     },
   });
-
-  if (notes.includes("sourceIdeaId=pending")) {
-    const normalized = ensureAutonomousPromotedGoalNotes(row.id, (input.notes ?? "").trim());
-    if (normalized !== notes && normalized.length <= NOTES_MAX) {
-      const updated = await deps.prisma.scratchpadItem.update({
-        where: { id: row.id },
-        data: { notes: normalized },
-      });
-      return { item: mapScratchpadItem(updated) };
-    }
-  }
 
   return { item: mapScratchpadItem(row) };
 }
