@@ -251,6 +251,8 @@ describe("sandbox supervisor input containment", () => {
     expect(helper).toContain("O_NOFOLLOW");
     expect(helper).toContain("/proc/self/fd/");
     expect(helper).toContain("F_GETPATH");
+    expect(helper).toContain("bytearray(1024)");
+    expect(helper).toContain("fcntl.fcntl(fd, getpath, buf)");
     const script = [
       "import os, tempfile",
       helper,
@@ -286,6 +288,45 @@ describe("sandbox supervisor input containment", () => {
     ].join("\n");
     const result = spawnSync("python3", ["-c", script], { encoding: "utf8" });
     expect(result.status, result.stderr || result.stdout).toBe(0);
+  });
+
+  it("resolves opened paths through the macOS F_GETPATH buffer fallback", () => {
+    const helper = workspaceFileAccessPython();
+    expect(helper).toContain("bytearray(1024)");
+    expect(helper).toContain("fcntl.fcntl(fd, getpath, buf)");
+
+    const script = [
+      "import os, tempfile, fcntl as fcntl_mod",
+      helper,
+      "workspace = tempfile.mkdtemp(prefix='ws-')",
+      "path = os.path.join(workspace, 'note.txt')",
+      "open(path, 'w').write('hi')",
+      "fd = os.open(path, os.O_RDONLY)",
+      "real = os.path.realpath(path)",
+      // Force the /proc branch to fail so opened_path uses F_GETPATH.
+      "def boom(_):",
+      "  raise OSError('no /proc')",
+      "os.readlink = boom",
+      "fcntl_mod.F_GETPATH = 50",
+      "def fake_fcntl(fd_arg, cmd, *rest):",
+      "  if cmd != 50:",
+      "    raise OSError('unexpected fcntl cmd')",
+      "  if not rest:",
+      "    raise TypeError('F_GETPATH requires a path buffer')",
+      "  buf = rest[0]",
+      "  if not isinstance(buf, bytearray) or len(buf) < 1024:",
+      "    raise TypeError('F_GETPATH buffer must be bytearray(1024)')",
+      "  payload = real.encode() + b'\\0'",
+      "  buf[:len(payload)] = payload",
+      "  return 0",
+      "fcntl_mod.fcntl = fake_fcntl",
+      "assert opened_path(fd) == real",
+      "os.close(fd)",
+      "print('ok')",
+    ].join("\n");
+    const result = spawnSync("python3", ["-c", script], { encoding: "utf8" });
+    expect(result.status, result.stderr || result.stdout).toBe(0);
+    expect(result.stdout).toContain("ok");
   });
 
   it("requires both bot and workspace identities to match", () => {
