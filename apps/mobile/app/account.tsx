@@ -17,12 +17,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAvatarStyle } from "../components/avatar-style";
 import { BotAvatar } from "../components/bot-avatar";
-import type { MobileBot } from "../lib/api";
+import type { MobileBot, MobileMe } from "../lib/api";
 import {
   currentApiBase,
   deleteAccount,
   loadSessionToken,
-  type MobileMe,
   rpc,
   selectedSpaceId,
   signOut,
@@ -36,11 +35,11 @@ import {
 import { explicitSignInRoute } from "../lib/auth-routing";
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import { setUiLocale, useI18n } from "../lib/i18n";
+import type { LiveNotificationSettings } from "../lib/live-notifications";
 import {
   canPostPromotedNotifications,
   DEFAULT_LIVE_NOTIFICATION_SETTINGS,
   getLiveNotificationSettings,
-  type LiveNotificationSettings,
   openLiveNotificationSettings,
   openPromotedNotificationSettings,
   setLiveNotificationSettings,

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { AI_PRIVACY_URL, type AiDataUse, type AiRecipient } from "@rakazo/contracts";
+import type { AiDataUse, AiRecipient } from "@rakazo/contracts";
+import { AI_PRIVACY_URL } from "@rakazo/contracts";
 import { localBaseUrl } from "./pi-local-provider.js";
 import { listPiCatalog } from "./pi-models.js";
 import { voiceCatalogEntry } from "./voice-factory.js";

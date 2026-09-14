@@ -2,6 +2,7 @@ vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
 
 import * as SecureStore from "expo-secure-store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MobileMessage, MobileSnapshot } from "./api.js";
 import {
   adoptDeletedSpaceFallback,
   applyMobileThreadEvent,
@@ -13,8 +14,6 @@ import {
   loadApiBase,
   MAX_MOBILE_AUTH_RESPONSE_BYTES,
   MAX_MOBILE_RPC_RESPONSE_BYTES,
-  type MobileMessage,
-  type MobileSnapshot,
   mergeMobileSnapshot,
   passwordResetCapabilities,
   prependMobileMessagePage,

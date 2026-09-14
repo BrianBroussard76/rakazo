@@ -10,6 +10,7 @@ import type {
   Space,
   SpaceNavigation,
 } from "@rakazo/contracts";
+import type { ThreadHistory } from "@rakazo/core";
 import {
   aiConsentTarget,
   aiDataUsesForProcedure,
@@ -22,14 +23,14 @@ import {
   reduceLiveMessageBlocks,
   runFailureError,
   signupRequiresEmailVerification,
-  type ThreadHistory,
   takeLiveMessage,
   updateCloudAgentMessages,
   upsertMessageById,
 } from "@rakazo/core";
 import * as SecureStore from "expo-secure-store";
 import { promptAiConsent } from "./ai-consent";
-import { defaultApiBase, type EndpointResult, normalizeApiBase } from "./endpoint";
+import type { EndpointResult } from "./endpoint";
+import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
 import {

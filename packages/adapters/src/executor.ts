@@ -37,8 +37,8 @@ import {
   isAttachmentImageMimeType,
   OPENAI_COMPATIBLE_PROVIDER_ID,
 } from "@rakazo/contracts";
+import type { ActionApprovalRule, ToolCallStreak } from "@rakazo/core";
 import {
-  type ActionApprovalRule,
   appendTextSegment,
   appendToolCallSegment,
   applyJudgeDecision,
@@ -67,7 +67,6 @@ import {
   renderBotDirectory,
   resolveActionApprovalDetail,
   sandboxCommandTimeoutMs,
-  type ToolCallStreak,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
   unattendedTriggerToolRequiresApproval,
@@ -78,6 +77,7 @@ import {
   stableJsonValue,
   toolEffectIdempotencyKey,
 } from "@rakazo/core/node/approval-effect-key";
+import type { McpServer, Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   appendEventInTransaction,
   createSpaceForMember,
@@ -88,12 +88,8 @@ import {
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
   loadRunHistoryMessages,
-  type McpServer,
-  type Prisma,
-  type PrismaClient,
   parseComputerMode,
   SpaceLimitError,
-  type ThreadEvents,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { parse as parseShellCommand } from "shell-quote";
@@ -161,22 +157,23 @@ import {
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
 import { archiveSpawnedBot, spawnBot } from "./child-bots.js";
-import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-factory.js";
+import type { CloudAgentConnection } from "./cloud-agent-factory.js";
+import { cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
 import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
+import type { PluginConnectionRow } from "./composio-connector.js";
 import {
   collectLogIds,
   mergeConnectedPlugins,
   needsLivePluginSync,
-  type PluginConnectionRow,
   planLiveConnectionSync,
 } from "./composio-connector.js";
 import { BACKGROUND_WORK_LAUNCH, scheduleComputerSleep } from "./computer-idle.js";
+import type { ComputerExecutionLease } from "./computer-lifecycle.js";
 import {
   acquireComputerExecutionLease,
   ComputerBusyError,
-  type ComputerExecutionLease,
   holdComputerExecutionLeaseForTakeover,
   provisionComputer,
   releaseComputerExecutionLease,
@@ -238,10 +235,10 @@ import {
   secretValuesToRedact,
   serializeModelSecret,
 } from "./pi-oauth.js";
+import type { PlotSpec } from "./plot-tool.js";
 import {
   assertPlotDataWithinLimits,
   PLOT_TOOL_GUIDE,
-  type PlotSpec,
   parsePlotData,
   plotSvgToPng,
   renderPlotSpecToSvg,
@@ -284,7 +281,8 @@ import {
   skillReadFromTool,
   skillUpdateFromTool,
 } from "./skill-tools.js";
-import { type TakeoverResumeCheckpoint, takeoverResumeFromRelease } from "./takeover-resume.js";
+import type { TakeoverResumeCheckpoint } from "./takeover-resume.js";
+import { takeoverResumeFromRelease } from "./takeover-resume.js";
 import { getActiveTeachingSession, parsePlaybook } from "./teaching-session.js";
 import {
   attachWorkspaceFileToThread,

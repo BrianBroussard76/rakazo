@@ -11,13 +11,17 @@ import type {
   SandboxProvider,
   TransactionalEmailProvider,
 } from "@rakazo/adapter-kit";
+import type {
+  ComposioProvider,
+  ConnectorRegistry,
+  DestinationEmulator,
+  RemoteConnectorDependencies,
+} from "@rakazo/adapters";
 import {
   aiModelDisclosure,
   applyMessagingOutboundStatus,
   ChatSdkMessagingSurface,
   ComposioConnector,
-  type ComposioProvider,
-  type ConnectorRegistry,
   createBackgroundJobHandlers,
   createCloudAgentConnection,
   createConnectorStack,
@@ -28,7 +32,6 @@ import {
   createRunSandbox,
   createRunSecretWriter,
   createWebProvider,
-  type DestinationEmulator,
   destroyBot,
   EmailEmulator,
   EncryptedSecretStore,
@@ -53,7 +56,6 @@ import {
   pipedreamConfigFromEnv,
   piSessionsRoot,
   pushTokenPath,
-  type RemoteConnectorDependencies,
   reconcileCloudAgents,
   reconcileComputerUpdates,
   removePiUserSessions,
@@ -74,19 +76,20 @@ import {
   requireAiConsent,
   requireMembership,
 } from "@rakazo/db";
+import type { Logger } from "@rakazo/logging";
 import {
   createServiceLogger,
   enrichLogContext,
   getLogger,
   installLogger,
-  type Logger,
   SERVICE_NAMES,
 } from "@rakazo/logging";
 import { requestLogging } from "@rakazo/logging/hono";
 import { MarkdownMemoryStore } from "@rakazo/memory";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { type AppEnv, loadEnv } from "./env.js";
+import type { AppEnv } from "./env.js";
+import { loadEnv } from "./env.js";
 import { mountLocalSettings } from "./local-settings.js";
 import {
   createMessagingInboundHandler,

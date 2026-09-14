@@ -1,31 +1,40 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { implement, ORPCError } from "@orpc/server";
+import type {
+  AdapterContext,
+  AgentHomeStore,
+  ArtifactStore,
+  ConnectorCatalogItem,
+  JobPublisher,
+  MemoryStore,
+  SandboxProvider,
+} from "@rakazo/adapter-kit";
 import {
-  type AdapterContext,
-  type AgentHomeStore,
-  type ArtifactStore,
-  type ConnectorCatalogItem,
   computerControlExpireJobKey,
-  type JobPublisher,
-  type MemoryStore,
   messagingDeliverJob,
   routineJobKey,
   routineWakeupJob,
   runContinueJob,
   runJobKey,
-  type SandboxProvider,
 } from "@rakazo/adapter-kit";
-import type { CloudAgentConnection, IntegrationProviderSettings } from "@rakazo/adapters";
+import type {
+  CloudAgentConnection,
+  ComposioProvider,
+  ComputerExecutionLease,
+  ConnectorRegistry,
+  EncryptedSecretStore,
+  IntegrationProviderSettings,
+  MemoryProviderResolver,
+  PiOAuthLogins,
+  RemoteConnectorDependencies,
+} from "@rakazo/adapters";
 import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
-  type ComposioProvider,
   ComputerBusyError,
-  type ComputerExecutionLease,
-  type ConnectorRegistry,
   cancelComputerRunWork,
   checkpointAndRecordComputerWorkspace,
   clearInactiveUserComputerControl,
@@ -36,7 +45,6 @@ import {
   deploymentAutoReviewDefault,
   destroyBot,
   displayBotWorkspacePath,
-  type EncryptedSecretStore,
   enqueueTakeoverContinuation,
   expireComputerControl,
   hasActiveComputerControl,
@@ -47,17 +55,14 @@ import {
   listPiCatalog,
   listScratchpadItems,
   McpOAuthBroker,
-  type MemoryProviderResolver,
   mapScratchpadItem,
   modelCredentialDto,
-  type PiOAuthLogins,
   planLiveConnectionSync,
   prepareApiInstall,
   prepareGraphqlInstall,
   probeOpenAiCompatibleModels,
   provisionComputer,
   queueComputerUpdate,
-  type RemoteConnectorDependencies,
   releaseComputerExecutionLease,
   replaceComputer,
   resolveAutoReviewChecker,
@@ -75,15 +80,11 @@ import {
   verifyMcpInstall,
 } from "@rakazo/adapters";
 import type { Auth } from "@rakazo/auth";
+import type { Actor, ComputerStatus, McpServer, Me, SpaceNavigation } from "@rakazo/contracts";
 import {
-  type Actor,
   appContract,
-  type ComputerStatus,
   IntegrationProviderIdSchema,
-  type McpServer,
-  type Me,
   OPENAI_COMPATIBLE_PROVIDER_ID,
-  type SpaceNavigation,
 } from "@rakazo/contracts";
 import {
   ACTIVE_RUN_STATUSES,
@@ -94,6 +95,7 @@ import {
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
 } from "@rakazo/core";
+import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   appendEventInTransaction,
   CannotDeleteDefaultSpaceError,
@@ -119,7 +121,6 @@ import {
   newestModelCredentialOrder,
   newestVoiceCredentialOrder,
   Prisma,
-  type PrismaClient,
   parseComputerMode,
   releaseSpaceDeletionClaim,
   renewSpaceDeletionClaim,
@@ -130,7 +131,6 @@ import {
   SpaceNotFoundError,
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
-  type ThreadEvents,
   touchGroupUpdatedAt,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
@@ -163,11 +163,11 @@ import { listSpaceRuns } from "./runs.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { querySpaceSearch } from "./search.js";
 import { withSerializableRetry } from "./serializable-retry.js";
+import type { UpdaterProxyConfig } from "./server-update.js";
 import {
   applyServerUpdate,
   checkServerUpdate,
   readServerUpdateStatus,
-  type UpdaterProxyConfig,
   UpdaterProxyError,
 } from "./server-update.js";
 import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-skills.js";

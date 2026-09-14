@@ -1,9 +1,9 @@
 import { ORPCError } from "@orpc/server";
 import type { AdapterContext } from "@rakazo/adapter-kit";
+import type { EncryptedSecretStore } from "@rakazo/adapters";
 import {
   aiRecipient,
   createVoiceProvider,
-  type EncryptedSecretStore,
   isVoiceProviderId,
   listVoiceCatalog,
   MAX_SPEAK_CHARS,
@@ -13,6 +13,7 @@ import {
 } from "@rakazo/adapters";
 import type { Actor, VoiceCredential, VoiceStatus } from "@rakazo/contracts";
 import { toUtterances } from "@rakazo/core";
+import type { PrismaClient } from "@rakazo/db";
 import {
   AiConsentRequired,
   deleteUnreferencedCredentialSecret,
@@ -21,7 +22,6 @@ import {
   IsolationError,
   newestVoiceCredentialOrder,
   Prisma,
-  type PrismaClient,
   requireAiConsent,
   selectSpaceVoicePreference,
 } from "@rakazo/db";

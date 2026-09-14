@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { type AgentRuntime, type JobPublisher, runJobKey } from "@rakazo/adapter-kit";
+import type { AgentRuntime, JobPublisher } from "@rakazo/adapter-kit";
+import { runJobKey } from "@rakazo/adapter-kit";
 import { MessagingTeamChatEmulator } from "@rakazo/adapters";
 import type { AiConsentStatus, ModelConnectInput, RunStatus } from "@rakazo/contracts";
 import { ACTIVE_RUN_STATUSES, isTerminal } from "@rakazo/core";
 import type { createDb } from "@rakazo/db";
 import { sessionCookieHeader } from "../index.js";
 import type { EvalCase, Evidence } from "./cases.js";
-import { emptyTrial, type FailureCategory, redact, type TrialResult } from "./report.js";
+import type { FailureCategory, TrialResult } from "./report.js";
+import { emptyTrial, redact } from "./report.js";
 import { EvalServices } from "./services.js";
 
 type App = { request: (input: string, init?: RequestInit) => Promise<Response> };

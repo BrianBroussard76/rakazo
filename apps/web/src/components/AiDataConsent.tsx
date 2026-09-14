@@ -1,4 +1,5 @@
-import { AI_DATA_DISCLOSURES, AI_PRIVACY_URL, type AiConsentStatus } from "@rakazo/contracts";
+import type { AiConsentStatus } from "@rakazo/contracts";
+import { AI_DATA_DISCLOSURES, AI_PRIVACY_URL } from "@rakazo/contracts";
 import {
   Button,
   Dialog,
@@ -8,7 +9,8 @@ import {
   DialogTitle,
 } from "@rakazo/ui-web";
 import { useEffect, useState } from "react";
-import { type AiConsentPrompt, promptAiConsent, subscribeAiConsent } from "../lib/ai-consent";
+import type { AiConsentPrompt } from "../lib/ai-consent";
+import { promptAiConsent, subscribeAiConsent } from "../lib/ai-consent";
 import { rpc } from "../lib/rpc";
 
 export function AiDataConsentDialog() {

@@ -8,14 +8,8 @@ import {
   selectConfiguredModel,
   toStringRecord,
 } from "@rakazo/adapters";
-import {
-  type Actor,
-  AI_CONSENT_REQUIRED,
-  AI_DISCLOSURE_VERSION,
-  type AiConsentQuery,
-  type AiConsentStatus,
-  type AiRecipient,
-} from "@rakazo/contracts";
+import type { Actor, AiConsentQuery, AiConsentStatus, AiRecipient } from "@rakazo/contracts";
+import { AI_CONSENT_REQUIRED, AI_DISCLOSURE_VERSION } from "@rakazo/contracts";
 import { findDefaultModelCredential, findModelCredential } from "@rakazo/db";
 import type { RouterDeps } from "./router.js";
 import { resolveThreadTarget } from "./thread-target.js";

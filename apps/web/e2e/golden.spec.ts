@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   activeBotId,
   captureScreenshot,
@@ -333,6 +334,12 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
     if (message.type() === "error") browserErrors.push(message.text());
   });
   page.on("requestfailed", (request) => {
+    // Auth deliberately aborts capability discovery on navigation or timeout.
+    if (
+      new URL(request.url()).pathname === "/api/auth/capabilities" &&
+      request.failure()?.errorText === "net::ERR_ABORTED"
+    )
+      return;
     failedRequests.push(
       `${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`,
     );
@@ -371,6 +378,7 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
   await expect(composer).toHaveAttribute("placeholder", "Message Chief");
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
   await composer.fill("Use the newer report and keep the answer short.");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await page.keyboard.press("Tab");
   await expect(
     page.getByTestId("composer-bar").getByRole("button", { name: "Voice", exact: true }),

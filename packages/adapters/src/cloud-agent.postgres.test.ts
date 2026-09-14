@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, BackgroundJob, JobPublisher } from "@rakazo/adapter-kit";
 import { AI_DISCLOSURE_VERSION } from "@rakazo/contracts";
-import { clearThread, createDb, type PrismaClient } from "@rakazo/db";
+import type { PrismaClient } from "@rakazo/db";
+import { clearThread, createDb } from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { aiRecipient } from "./ai-consent.js";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";

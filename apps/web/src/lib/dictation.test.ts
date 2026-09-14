@@ -516,9 +516,7 @@ describe("Dictation web speech", () => {
   it("uses a configured transcription provider without starting browser recognition", async () => {
     stubRecorderFallback(vi.fn());
     const available = vi.fn(async () => "available");
-    class LocalRecognition {
-      static available = available;
-    }
+    const LocalRecognition = Object.assign(vi.fn(), { available });
     Object.defineProperty(LocalRecognition.prototype, "processLocally", { value: false });
     vi.stubGlobal("window", { SpeechRecognition: LocalRecognition });
     const dictation = new Dictation();

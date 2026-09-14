@@ -7,17 +7,13 @@ import type {
 import { CloudAgentRequestRejected, runContinueJob } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { cloudAgentHttpsUrl } from "@rakazo/core";
-import {
-  AiConsentRequired,
-  appendEventInTransaction,
-  type CloudAgent,
-  Prisma,
-  requireAiConsent,
-} from "@rakazo/db";
+import type { CloudAgent } from "@rakazo/db";
+import { AiConsentRequired, appendEventInTransaction, Prisma, requireAiConsent } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { aiRecipient } from "./ai-consent.js";
 import { cloudAgentsEnabled } from "./cloud-agent-factory.js";
-import { type CloudAgentDeps, cloudAgentBlock, enqueueCloudAgent } from "./cloud-agent-service.js";
+import type { CloudAgentDeps } from "./cloud-agent-service.js";
+import { cloudAgentBlock, enqueueCloudAgent } from "./cloud-agent-service.js";
 import { cloudAgentLaunchSchema, cloudAgentPromptSchema } from "./cloud-agent-tools.js";
 
 /** Reconcile one persisted intent. A fenced lease serializes remote mutations. */

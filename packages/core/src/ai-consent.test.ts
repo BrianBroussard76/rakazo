@@ -1,6 +1,7 @@
-import { AI_DISCLOSURE_VERSION, type AiConsentStatus } from "@rakazo/contracts";
+import type { AiConsentStatus } from "@rakazo/contracts";
+import { AI_DISCLOSURE_VERSION } from "@rakazo/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { aiDataUsesForProcedure, ensureAiDataConsent } from "./ai-consent.js";
+import { AiConsentBlocked, aiDataUsesForProcedure, ensureAiDataConsent } from "./ai-consent.js";
 
 const status: AiConsentStatus = {
   scope: "account-space",
@@ -26,6 +27,17 @@ const status: AiConsentStatus = {
 };
 
 describe("foreground AI consent", () => {
+  it("identifies a failed preflight separately from a dispatched mutation failure", async () => {
+    const check = ensureAiDataConsent({
+      uses: ["model"],
+      status: async () => {
+        throw new Error("Offline");
+      },
+      prompt: vi.fn(),
+      allow: vi.fn(),
+    });
+    await expect(check).rejects.toBeInstanceOf(AiConsentBlocked);
+  });
   it("does not grant anything when declined", async () => {
     const allow = vi.fn();
     await expect(

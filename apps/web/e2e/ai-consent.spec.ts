@@ -74,4 +74,16 @@ test("AI disclosure blocks sending until allowed and supports withdrawal", async
   expect(allowed).toBe(false);
   await settings.getByRole("button", { name: "Withdraw all permissions" }).scrollIntoViewIfNeeded();
   await captureScreenshot(page, testInfo, "ai-data-sharing-settings");
+  await page.keyboard.press("Escape");
+  await expect(settings).not.toBeVisible();
+  await page.route("**/rpc/threads/send", async (route) => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    await route.abort(); // The server committed; the client did not receive its response.
+  });
+  await composer.fill("Do not restore this sent message");
+  await composer.press("Enter");
+  await disclosure.getByRole("button", { name: "Allow", exact: true }).click();
+  await expect(page.getByTestId("composer-error")).toBeVisible();
+  await expect(composer).toHaveValue("");
 });

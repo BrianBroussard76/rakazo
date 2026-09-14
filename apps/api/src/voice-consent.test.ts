@@ -8,7 +8,8 @@ vi.mock("@rakazo/adapters", async (original) => ({
   createVoiceProvider: () => calls,
 }));
 
-import { synthesizeVoice, transcribeVoice, type VoiceDeps } from "./voice.js";
+import type { VoiceDeps } from "./voice.js";
+import { synthesizeVoice, transcribeVoice } from "./voice.js";
 
 describe("voice sharing permission", () => {
   it("blocks synthesis and transcription before permission and after withdrawal", async () => {

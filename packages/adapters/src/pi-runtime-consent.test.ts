@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ sent: vi.fn(), turns: 1, helper: false }));
+const fixture = vi.hoisted(() => ({
+  sent: vi.fn(),
+  turns: 1,
+  helper: false,
+  effectiveProvider: "test",
+}));
 type FakeOptions = {
   streamFn(model: unknown, context: unknown, options: unknown): Promise<void>;
   initialState: {
@@ -27,7 +32,12 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
 }));
 vi.mock("@earendil-works/pi-ai/providers/all", () => ({
   builtinModels: () => ({
-    getModel: () => ({ provider: "test", id: "test", api: "openai-completions", reasoning: false }),
+    getModel: () => ({
+      provider: fixture.effectiveProvider,
+      id: "test",
+      api: "openai-completions",
+      reasoning: false,
+    }),
     streamSimple: async (
       _model: unknown,
       _context: unknown,
@@ -45,7 +55,8 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
   registerOpenAiCompatibleRuntime: (models: unknown) => models,
 }));
 
-import { PiAgentRuntime, type PiAgentRuntimeOptions } from "./pi-runtime.js";
+import type { PiAgentRuntimeOptions } from "./pi-runtime.js";
+import { PiAgentRuntime } from "./pi-runtime.js";
 
 async function run(authorizeModel: PiAgentRuntimeOptions["authorizeModel"]) {
   const runtime = new PiAgentRuntime({ authorizeModel });
@@ -69,8 +80,20 @@ beforeEach(() => {
   fixture.sent.mockClear();
   fixture.turns = 1;
   fixture.helper = false;
+  fixture.effectiveProvider = "test";
 });
 describe("provider dispatch consent", () => {
+  it("authorizes the effective provider for parent and helper dispatch", async () => {
+    fixture.effectiveProvider = "actual-provider";
+    fixture.helper = true;
+    const authorize = vi.fn(async (model: { provider: string }) => {
+      expect(model.provider).toBe("actual-provider");
+      return {};
+    });
+    await run(authorize);
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(fixture.sent).toHaveBeenCalledTimes(2);
+  });
   it("does not transmit when permission is absent", async () => {
     await expect(
       run(async () => {

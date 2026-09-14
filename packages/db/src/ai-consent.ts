@@ -1,4 +1,5 @@
-import { AI_CONSENT_REQUIRED, AI_DISCLOSURE_VERSION, type AiRecipient } from "@rakazo/contracts";
+import type { AiRecipient } from "@rakazo/contracts";
+import { AI_CONSENT_REQUIRED, AI_DISCLOSURE_VERSION } from "@rakazo/contracts";
 import type { PrismaClient } from "./client.js";
 
 export class AiConsentRequired extends Error {

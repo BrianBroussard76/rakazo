@@ -1,9 +1,12 @@
-import {
-  AI_CONSENT_REQUIRED,
-  type AiConsentStatus,
-  type AiDataUse,
-  type AiRecipient,
-} from "@rakazo/contracts";
+import type { AiConsentStatus, AiDataUse, AiRecipient } from "@rakazo/contracts";
+import { AI_CONSENT_REQUIRED } from "@rakazo/contracts";
+
+/** A foreground check failed before the requested mutation was dispatched. */
+export class AiConsentBlocked extends Error {
+  constructor(message = AI_CONSENT_REQUIRED) {
+    super(message);
+  }
+}
 
 /** Only user actions that can start AI processing need a foreground disclosure. */
 export function aiDataUsesForProcedure(procedure: string): AiDataUse[] {
@@ -32,12 +35,16 @@ export async function ensureAiDataConsent(options: {
   allow(input: { scope: string; version: string; keys: string[] }): Promise<unknown>;
 }) {
   if (options.uses.length === 0) return;
-  const status = await options.status();
-  for (const recipient of status.recipients) {
-    if (recipient.allowed || !options.uses.includes(recipient.use)) continue;
-    if (recipient.unavailableReason) throw new Error(recipient.unavailableReason);
-    if (!(await options.prompt(recipient))) throw new Error(AI_CONSENT_REQUIRED);
-    await options.allow({ scope: status.scope, version: status.version, keys: [recipient.key] });
+  try {
+    const status = await options.status();
+    for (const recipient of status.recipients) {
+      if (recipient.allowed || !options.uses.includes(recipient.use)) continue;
+      if (recipient.unavailableReason) throw new Error(recipient.unavailableReason);
+      if (!(await options.prompt(recipient))) throw new Error(AI_CONSENT_REQUIRED);
+      await options.allow({ scope: status.scope, version: status.version, keys: [recipient.key] });
+    }
+  } catch (error) {
+    throw new AiConsentBlocked(error instanceof Error ? error.message : AI_CONSENT_REQUIRED);
   }
 }
 

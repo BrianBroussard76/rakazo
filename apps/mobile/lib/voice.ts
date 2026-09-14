@@ -1,7 +1,8 @@
 import { ensureAiDataConsent, readBoundedResponseBytes } from "@rakazo/core";
 import { File, Paths } from "expo-file-system";
 import { promptAiConsent } from "./ai-consent";
-import { type ApiRequestContext, captureApiRequestContext, rpc } from "./api";
+import type { ApiRequestContext } from "./api";
+import { captureApiRequestContext, rpc } from "./api";
 import { t } from "./i18n";
 
 type SpeechOptions = { voiceId?: string; botId?: string };

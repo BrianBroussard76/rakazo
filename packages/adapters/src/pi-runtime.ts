@@ -1,19 +1,14 @@
 import { randomUUID } from "node:crypto";
-import {
-  Agent,
-  type AgentMessage,
-  type AgentTool,
-  type AgentToolResult,
-} from "@earendil-works/pi-agent-core";
-import {
-  type Api,
-  clampThinkingLevel,
-  type Model,
-  type Models,
-  type ModelThinkingLevel,
-  type SimpleStreamOptions,
-  Type,
+import type { AgentMessage, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
+import { Agent } from "@earendil-works/pi-agent-core";
+import type {
+  Api,
+  Model,
+  Models,
+  ModelThinkingLevel,
+  SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import { clampThinkingLevel, Type } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type {
   AdapterContext,
@@ -40,11 +35,8 @@ import {
   registerOpenAiCompatibleCatalog,
   registerOpenAiCompatibleRuntime,
 } from "./pi-openai-compatible-provider.js";
-import {
-  PiJsonlSessionRecorder,
-  type PiSessionHandle,
-  type PiSessionRecorder,
-} from "./pi-session.js";
+import type { PiSessionHandle, PiSessionRecorder } from "./pi-session.js";
+import { PiJsonlSessionRecorder } from "./pi-session.js";
 import { textContentArg } from "./tool-text.js";
 
 const running = new Map<string, { controller: AbortController; work: Promise<void> }>();
@@ -246,7 +238,11 @@ export class PiAgentRuntime implements AgentRuntime {
               ...reliableStreamOptions(m, options),
               onPayload: async (payload) => ({
                 ...(payload as Record<string, unknown>),
-                ...(await host.authorizeModel(request.model)),
+                ...(await host.authorizeModel({
+                  ...request.model,
+                  provider: m.provider,
+                  id: m.id,
+                })),
               }),
             }),
           getApiKey: async () => apiKey,
@@ -490,9 +486,6 @@ function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
       : modelConfig.id.trim();
   const models = modelsForRequest({ model: modelConfig }, provider);
   let model = models.getModel(provider, modelId);
-  if (!model && provider !== "openrouter" && provider !== OPENAI_COMPATIBLE_PROVIDER_ID) {
-    model = models.getModel("openrouter", modelId);
-  }
   if (
     !model &&
     provider === "openrouter" &&
@@ -1008,7 +1001,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         ...reliableStreamOptions(m, options),
         onPayload: async (payload) => ({
           ...(payload as Record<string, unknown>),
-          ...(await host.authorizeModel(requestModel)),
+          ...(await host.authorizeModel({ ...requestModel, provider: m.provider, id: m.id })),
         }),
       }),
     getApiKey: async () => selectedModel.apiKey,
