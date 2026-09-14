@@ -1,4 +1,6 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Update your server to use AI data sharing in this mobile version.":
+    "请更新服务器，以便在此移动版本中使用 AI 数据共享功能。",
   "Release computer": "释放电脑",
   "Release interrupted computer?": "释放中断的电脑？",
   "Make sure nothing is still running on this computer.": "请确认这台电脑上没有仍在运行的任务。",

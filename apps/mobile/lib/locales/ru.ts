@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Update your server to use AI data sharing in this mobile version.":
+    "Обновите сервер, чтобы использовать обмен данными с ИИ в этой версии мобильного приложения.",
   "Ask the server owner to configure this provider.":
     "Попросите владельца сервера настроить этого провайдера.",
   "Client ID": "ID клиента",
