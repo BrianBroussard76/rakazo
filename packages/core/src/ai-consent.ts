@@ -9,8 +9,16 @@ export class AiConsentBlocked extends Error {
 }
 
 /** Only user actions that can start AI processing need a foreground disclosure. */
-export function aiDataUsesForProcedure(procedure: string): AiDataUse[] {
+export function aiDataUsesForProcedure(procedure: string, input?: unknown): AiDataUse[] {
   const path = procedure.replaceAll(".", "/");
+  if (
+    path === "routines/update" &&
+    input &&
+    typeof input === "object" &&
+    "active" in input &&
+    input.active === false
+  )
+    return [];
   if (
     [
       "threads/send",
@@ -31,7 +39,7 @@ export function aiDataUsesForProcedure(procedure: string): AiDataUse[] {
 export async function ensureAiDataConsent(options: {
   uses: AiDataUse[];
   status(): Promise<AiConsentStatus>;
-  prompt(recipient: AiRecipient): Promise<boolean>;
+  prompt(recipient: AiRecipient, privacyUrl?: string): Promise<boolean>;
   allow(input: { scope: string; version: string; keys: string[] }): Promise<unknown>;
 }) {
   if (options.uses.length === 0) return;
@@ -39,8 +47,8 @@ export async function ensureAiDataConsent(options: {
     const status = await options.status();
     for (const recipient of status.recipients) {
       if (recipient.allowed || !options.uses.includes(recipient.use)) continue;
-      if (recipient.unavailableReason) throw new Error(recipient.unavailableReason);
-      if (!(await options.prompt(recipient))) throw new Error(AI_CONSENT_REQUIRED);
+      if (!(await options.prompt(recipient, status.privacyUrl)))
+        throw new Error(AI_CONSENT_REQUIRED);
       await options.allow({ scope: status.scope, version: status.version, keys: [recipient.key] });
     }
   } catch (error) {

@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { AiDataUse, AiRecipient } from "@rakazo/contracts";
-import { AI_PRIVACY_URL } from "@rakazo/contracts";
 import { localBaseUrl } from "./pi-local-provider.js";
 import { listPiCatalog } from "./pi-models.js";
 import { voiceCatalogEntry } from "./voice-factory.js";
@@ -38,8 +37,15 @@ export function aiRecipient(input: {
     key,
     name: origin ? `${name} (${origin})` : name,
     use: input.use,
-    detail: input.modelId ? `Model: ${input.modelId}` : "",
-    privacyUrl: PRIVACY_URLS[input.provider] ?? AI_PRIVACY_URL,
+    detail: [
+      input.modelId ? `Model: ${input.modelId}.` : "",
+      ["openrouter", "vercel-ai-gateway"].includes(input.provider)
+        ? `${name} forwards requests to model providers using the routing and privacy settings configured for this connection.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" "),
+    privacyUrl: PRIVACY_URLS[input.provider],
   };
 }
 

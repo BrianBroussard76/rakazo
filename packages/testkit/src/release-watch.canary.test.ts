@@ -8,7 +8,6 @@ import {
   RELEASE_WATCH_GITHUB_TOOL_NAMES,
   resolveReleaseWatchEvalModelId,
 } from "@rakazo/adapters";
-import type { AiConsentStatus } from "@rakazo/contracts";
 import { loadRootEnv } from "@rakazo/core/node/load-root-env";
 import { afterAll, describe, expect, it } from "vitest";
 import { sessionCookieHeader } from "./index.js";
@@ -97,15 +96,6 @@ describeLive("live release-watch eval (GPT 5.6 Luna + GitHub emulator)", () => {
       notifyOnFinish: true,
     });
 
-    const consent = await rpc<AiConsentStatus>(handles.app, cookie, "aiConsent/status", {
-      botId: bot.id,
-      uses: ["model", "memory"],
-    });
-    await rpc(handles.app, cookie, "aiConsent/allow", {
-      scope: consent.scope,
-      version: consent.version,
-      keys: consent.recipients.map((recipient) => recipient.key),
-    });
     // Mirror the Discord user ask: no tool names, no Bing/browser coaching.
     // schedule_create + connected-plugin guidance should steer the model.
     await rpc(handles.app, cookie, "threads/send", {

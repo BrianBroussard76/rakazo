@@ -1,5 +1,4 @@
 import { readBoundedResponseBytes } from "@rakazo/core";
-import { ensureWebAiConsent } from "./rpc";
 import { selectedSpaceId, withSpaceHeaders } from "./rpc.js";
 
 export type DictationMode = "hold" | "endpoint";
@@ -10,13 +9,9 @@ export type DictationSnapshot = {
   error?: string;
 };
 
-type SpeechRecognitionCtor = {
-  new (): SpeechRecognitionLike;
-  available?(options: { langs: string[]; processLocally: boolean }): Promise<string>;
-};
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 interface SpeechRecognitionLike {
-  processLocally?: boolean;
   continuous: boolean;
   interimResults: boolean;
   lang: string;
@@ -37,8 +32,7 @@ const ENDPOINT_UNSUPPORTED =
   "This browser can't detect when you stop talking. Use Chrome, the desktop app, or hold-to-talk in the composer.";
 
 export function webSpeechAvailable(): boolean {
-  const Ctor = speechRecognitionCtor();
-  return Boolean(Ctor && "processLocally" in Ctor.prototype);
+  return Boolean(speechRecognitionCtor());
 }
 
 function speechRecognitionCtor(): SpeechRecognitionCtor | undefined {
@@ -132,29 +126,11 @@ export class Dictation {
     const spaceId = selectedSpaceId();
     this.onFinal = opts.onFinal;
     this.set({ status: "listening", transcript: "" });
-    const Ctor = speechRecognitionCtor();
-    const localReady =
-      !opts.transcribe && webSpeechAvailable() && Ctor?.available
-        ? await Ctor.available({ langs: [navigator.language || "en-US"], processLocally: true })
-            .then((state) => state === "available")
-            .catch(() => false)
-        : false;
-    if (this.token !== mine) return;
-    if (localReady) {
+    if (webSpeechAvailable()) {
       this.listenWebSpeech(opts.mode, opts.endpointMs ?? 850, mine);
       return;
     }
     if (opts.transcribe) {
-      try {
-        await ensureWebAiConsent(["voice"], spaceId);
-      } catch (error) {
-        this.set({
-          ...IDLE,
-          error: error instanceof Error ? error.message : "AI permission required.",
-        });
-        return;
-      }
-      if (this.token !== mine) return;
       await this.listenRecorder(mine, opts.mode, opts.endpointMs ?? 850, spaceId);
       return;
     }
@@ -169,7 +145,6 @@ export class Dictation {
     const Ctor = speechRecognitionCtor();
     if (!Ctor) return;
     const rec = new Ctor();
-    rec.processLocally = true;
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = navigator.language || "en-US";

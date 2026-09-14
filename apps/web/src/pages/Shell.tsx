@@ -13,7 +13,6 @@ import type {
   ConnectionCatalogItem,
   Group,
   Me,
-  MessageReaction,
   ProductEvent,
   Routine,
   SearchHit,
@@ -30,13 +29,13 @@ import {
   ATTACHMENT_MAX_COUNT,
   canReactToThreadMessage,
   MESSAGE_REACTIONS,
+  type MessageReaction,
   normalizeCreateBotProfile,
 } from "@rakazo/contracts";
-import type { ComposerMention, SlashActionId } from "@rakazo/core";
 import {
-  AiConsentBlocked,
   attachmentsForThread,
   buildComposerMentionOptions,
+  type ComposerMention,
   clampMentionHighlightIndex,
   cronFromPreset,
   groupBotsForSidebar,
@@ -53,13 +52,13 @@ import {
   resolveMentionPickerKey,
   runThreadSubscription,
   SLASH_ACTIONS,
+  type SlashActionId,
   searchHitThreadTarget,
   serializeComposerPrompt,
   speechFromBlocks,
   truncateSlashDescription,
   userVisibleMessages,
 } from "@rakazo/core";
-import type { GroupAvatarMember } from "@rakazo/ui-web";
 import {
   AvatarStyleProvider,
   BotAvatar,
@@ -70,6 +69,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   GroupAvatar,
+  type GroupAvatarMember,
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
@@ -106,10 +106,13 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { ClipboardEvent, DragEvent, MutableRefObject, RefObject } from "react";
 import {
+  type ClipboardEvent,
+  type DragEvent,
   lazy,
+  type MutableRefObject,
   memo,
+  type RefObject,
   Suspense,
   useCallback,
   useEffect,
@@ -191,10 +194,10 @@ import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
-import type { RoutineDraftState } from "./RoutineEditor";
 import {
   draftFromRoutine,
   emptyRoutineDraft,
+  type RoutineDraftState,
   RoutineEditor,
   RoutineListHeader,
   RoutineListRow,
@@ -2013,8 +2016,8 @@ export function ShellPage() {
         }
         if (groupTarget && activeGroupId.current === groupTarget) setAttachmentNotice(null);
         if (botTarget && activeBotId.current === botTarget) setAttachmentNotice(null);
-        if (groupTarget) await refreshGroupThreadRef.current(groupTarget).catch(() => undefined);
-        else if (botTarget) await refreshThreadRef.current(botTarget).catch(() => undefined);
+        if (groupTarget) await refreshGroupThreadRef.current(groupTarget);
+        else if (botTarget) await refreshThreadRef.current(botTarget);
       } catch (error) {
         if (reroutedToGroup && groupTarget) {
           setSendError(error instanceof Error ? error.message : t`Failed to send message`);
@@ -2023,7 +2026,6 @@ export function ShellPage() {
         } else if (botTarget && activeBotId.current === botTarget) {
           setSendError(error instanceof Error ? error.message : t`Failed to send message`);
         }
-        throw error;
       } finally {
         setSending(false);
       }
@@ -4700,12 +4702,7 @@ const Composer = memo(function Composer({
     setSelectedSkill(null);
     const mentions = selectedMentions;
     setSelectedMentions([]);
-    void onSend(text, mentions).catch((error) => {
-      if (!(error instanceof AiConsentBlocked)) return;
-      setDraft((current) => current || draft);
-      setSelectedSkill((current) => current ?? selectedSkill);
-      setSelectedMentions((current) => (current.length ? current : mentions));
-    });
+    void onSend(text, mentions);
   }
 
   function handleDragEnter(event: DragEvent<HTMLFieldSetElement>) {

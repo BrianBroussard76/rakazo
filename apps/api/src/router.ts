@@ -136,7 +136,7 @@ import {
 import { getLogger } from "@rakazo/logging";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "./agent-secrets.js";
 import { createAgentSkillsService } from "./agent-skills.js";
-import { aiConsentStatus, allowAiConsent, requireModelConsent } from "./ai-consent.js";
+import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
 import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
 import {
@@ -442,6 +442,7 @@ export interface RouterDeps {
     defaultModel: string;
     deploymentModelKey?: string;
     webOrigin: string;
+    privacyPolicyUrl?: string;
     screenProxySecret: string;
     sandboxProvider: string;
     gitSha?: string;
@@ -1411,7 +1412,6 @@ export function createRouter(deps: RouterDeps) {
         if ((await modelSetup(deps, context.actor)).needsModel) {
           throw new ORPCError("BAD_REQUEST", { message: "Connect a model to start a run." });
         }
-        await requireModelConsent(deps, context.actor, input);
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
         if (target.kind === "bot") {
           await assertTeachingSendAllowed(deps.prisma, context.actor.spaceId, target.botId);

@@ -26,24 +26,24 @@ export default function AiDataSharing() {
           {recipient.detail ? (
             <Text style={{ color: tokens.mutedForeground }}>{recipient.detail}</Text>
           ) : null}
-          <Text style={{ color: tokens.foreground }}>
-            {recipient.unavailableReason ?? AI_DATA_DISCLOSURES[recipient.use]}
-          </Text>
+          <Text style={{ color: tokens.foreground }}>{AI_DATA_DISCLOSURES[recipient.use]}</Text>
+          {recipient.privacyUrl ? (
+            <Button
+              color={tokens.primary}
+              title="Provider privacy policy"
+              onPress={() => void Linking.openURL(recipient.privacyUrl!)}
+            />
+          ) : null}
           <Button
             color={tokens.primary}
-            title="Provider privacy policy"
-            onPress={() => void Linking.openURL(recipient.privacyUrl)}
-          />
-          <Button
-            color={tokens.primary}
-            title={recipient.allowed ? "Withdraw permission" : "Allow"}
-            disabled={pending || (!recipient.allowed && Boolean(recipient.unavailableReason))}
+            title={recipient.allowed ? "Withdraw mobile permission" : "Allow on mobile"}
+            disabled={pending}
             onPress={() => {
               setPending(true);
               void (async () => {
                 if (recipient.allowed)
                   setStatus(await rpc("aiConsent/revoke", { key: recipient.key }));
-                else if (await promptAiConsent(recipient))
+                else if (await promptAiConsent(recipient, status.privacyUrl))
                   setStatus(
                     await rpc("aiConsent/allow", {
                       scope: status.scope,
@@ -61,9 +61,13 @@ export default function AiDataSharing() {
       {status?.recipients.length === 0 ? (
         <Text style={{ color: tokens.foreground }}>No AI services configured.</Text>
       ) : null}
+      <Text style={{ color: tokens.mutedForeground }}>
+        Withdrawal applies to new mobile actions. Stop existing runs and disable routines
+        separately.
+      </Text>
       <Button
         color={tokens.primary}
-        title="Withdraw all permissions"
+        title="Withdraw all mobile permissions"
         disabled={pending}
         onPress={() => {
           setPending(true);
@@ -76,7 +80,7 @@ export default function AiDataSharing() {
       <Button
         color={tokens.primary}
         title="Privacy policy"
-        onPress={() => void Linking.openURL(AI_PRIVACY_URL)}
+        onPress={() => void Linking.openURL(status?.privacyUrl ?? AI_PRIVACY_URL)}
       />
     </ScrollView>
   );

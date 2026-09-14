@@ -6,7 +6,6 @@ function resolverFor(
   options: { mode?: "cloud" | "local"; ownerUserId?: string | null; baseUrl?: string } = {},
 ) {
   const prisma = {
-    aiDataConsent: { findUnique: vi.fn(async () => ({ version: "2026-09-14" })) },
     spaceMemoryConfig: {
       findUnique: vi.fn(async () => ({
         userId: "config-author",

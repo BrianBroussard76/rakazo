@@ -18,7 +18,6 @@ import type {
   RemoteConnectorDependencies,
 } from "@rakazo/adapters";
 import {
-  aiModelDisclosure,
   applyMessagingOutboundStatus,
   ChatSdkMessagingSurface,
   ComposioConnector,
@@ -73,7 +72,6 @@ import {
   createThreadEvents,
   parsePositiveInteger,
   provisionMessagingIdentity,
-  requireAiConsent,
   requireMembership,
 } from "@rakazo/db";
 import type { Logger } from "@rakazo/logging";
@@ -305,11 +303,6 @@ export async function createApp(
     env.agentRuntime === "scripted"
       ? new ScriptedAgentRuntime()
       : new PiAgentRuntime({
-          authorizeModel: async (model, context) => {
-            const disclosure = await aiModelDisclosure(model);
-            await requireAiConsent(prisma, context, disclosure.recipient);
-            return disclosure.payloadFields;
-          },
           sessionRoot: env.piSessionRecording ? piSessionsRoot(env.dataDir) : undefined,
         });
   const notifications = new ExpoPushProvider(env.dataDir);
@@ -462,6 +455,7 @@ export async function createApp(
       teamChatJudgeModel: env.teamChatJudgeModel,
       deploymentModelKey: env.deploymentModelKey,
       webOrigin: env.webOrigin,
+      privacyPolicyUrl: env.privacyPolicyUrl,
       screenProxySecret: env.screenProxySecret,
       sandboxProvider: env.sandboxProvider,
       gitSha: env.gitSha,

@@ -1,9 +1,8 @@
 import { ORPCError } from "@orpc/server";
 import type { AdapterContext } from "@rakazo/adapter-kit";
-import type { EncryptedSecretStore } from "@rakazo/adapters";
 import {
-  aiRecipient,
   createVoiceProvider,
+  type EncryptedSecretStore,
   isVoiceProviderId,
   listVoiceCatalog,
   MAX_SPEAK_CHARS,
@@ -13,16 +12,14 @@ import {
 } from "@rakazo/adapters";
 import type { Actor, VoiceCredential, VoiceStatus } from "@rakazo/contracts";
 import { toUtterances } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
 import {
-  AiConsentRequired,
   deleteUnreferencedCredentialSecret,
   findDefaultVoiceCredential,
   findVoiceCredential,
   IsolationError,
   newestVoiceCredentialOrder,
   Prisma,
-  requireAiConsent,
+  type PrismaClient,
   selectSpaceVoicePreference,
 } from "@rakazo/db";
 import type { Context, Hono } from "hono";
@@ -225,11 +222,6 @@ export async function synthesizeVoice(
   if (text.length > MAX_SPEAK_CHARS) {
     throw new ORPCError("BAD_REQUEST", { message: "That utterance is too long to speak." });
   }
-  await requireAiConsent(
-    deps.prisma,
-    actor,
-    aiRecipient({ provider: target.cred.provider, use: "voice" }),
-  );
   const provider = createVoiceProvider(target.cred.provider);
   return provider.synthesize(
     {
@@ -249,11 +241,6 @@ export async function transcribeVoice(
 ) {
   const loaded = await loadDefaultVoiceCredential(deps, actor);
   if (!loaded) throw new NoVoiceConfigured("key");
-  await requireAiConsent(
-    deps.prisma,
-    actor,
-    aiRecipient({ provider: loaded.cred.provider, use: "voice" }),
-  );
   const provider = createVoiceProvider(loaded.cred.provider);
   if (!provider.transcribe) {
     throw new ORPCError("BAD_REQUEST", {
@@ -355,7 +342,6 @@ function decodeAudioBase64(value: string): Uint8Array {
 }
 
 function voiceHttpError(c: Context, error: unknown) {
-  if (error instanceof AiConsentRequired) return c.json({ error: error.message }, 403);
   if (error instanceof IsolationError) {
     return c.json({ error: "Resource not found" }, 404);
   }

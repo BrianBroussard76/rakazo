@@ -562,7 +562,7 @@ export async function rpc<T>(
   } = {},
 ): Promise<T> {
   const requestSpaceGeneration = spaceSelectionGeneration;
-  const uses = aiDataUsesForProcedure(proc);
+  const uses = aiDataUsesForProcedure(proc, body);
   const consentContext =
     options.requestContext ?? (uses.length ? await captureApiRequestContext() : undefined);
   await ensureAiDataConsent({
@@ -604,7 +604,10 @@ export async function rpc<T>(
       controller.signal,
     );
     if (!res.ok || parsed.error) {
-      const message = parsed.error?.message ?? `rpc ${proc} failed`;
+      const message =
+        proc === "aiConsent/status" && res.status === 404
+          ? t("Update your server to use AI data sharing in this mobile version.")
+          : (parsed.error?.message ?? `rpc ${proc} failed`);
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:

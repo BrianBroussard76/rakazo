@@ -18,6 +18,7 @@ function setup() {
       secret: { findMany: vi.fn(async () => []) },
       bot: { findMany: vi.fn(async () => []) },
       spaceVoicePreference: {
+        findFirst: vi.fn(async () => ({ credential: { provider: "openai" }, voiceId: "alloy" })),
         findMany: vi.fn(async () => [{ credential: { provider: "openai" } }]),
       },
       spaceMemoryConfig: { findUnique: vi.fn(async () => null) },
@@ -52,6 +53,22 @@ describe("consent grants", () => {
     expect(deps.prisma.bot.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ id: { in: ["bot"] } }) }),
     );
+  });
+  it("discloses only the selected voice provider before a voice action", async () => {
+    const { deps, actor } = setup();
+    vi.mocked(deps.prisma.spaceVoicePreference.findMany).mockResolvedValue([
+      { credential: { provider: "openai" } },
+      { credential: { provider: "elevenlabs" } },
+    ] as never);
+    const status = await aiConsentStatus(deps, actor, { uses: ["voice"] });
+    expect(status.recipients).toHaveLength(1);
+    expect(status.recipients[0]?.name).toBe("OpenAI");
+    expect(deps.prisma.spaceVoicePreference.findMany).not.toHaveBeenCalled();
+  });
+  it("returns an operator policy without requiring a hosted provider", async () => {
+    const { deps, actor } = setup();
+    deps.env.privacyPolicyUrl = "https://example.com/privacy";
+    expect((await aiConsentStatus(deps, actor)).privacyUrl).toBe("https://example.com/privacy");
   });
   it("rejects stale disclosures, unknown recipients, and a changed account or Space", async () => {
     const { deps, actor, upsert } = setup();

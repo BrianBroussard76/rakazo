@@ -2,6 +2,7 @@ vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
 
 import * as SecureStore from "expo-secure-store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { promptAiConsent } from "./ai-consent";
 import type { MobileMessage, MobileSnapshot } from "./api.js";
 import {
   adoptDeletedSpaceFallback,
@@ -354,6 +355,73 @@ describe("mobile API authentication", () => {
       }),
     );
     await expect(rpc("bots/get", { botId: "missing" })).rejects.toThrow("Bot does not exist");
+  });
+
+  it("blocks mobile message and attachment submission when AI sharing is declined", async () => {
+    vi.mocked(promptAiConsent).mockResolvedValue(false);
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      jsonResponse({
+        json: {
+          scope: "account-space",
+          version: "2026-09-14",
+          recipients: [
+            { key: "provider", name: "Example AI", use: "model", detail: "", allowed: false },
+          ],
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    for (const proc of ["threads/send", "artifacts/create", "routines/create"]) {
+      await expect(rpc(proc, { botId: "bot-1", text: "private content" })).rejects.toThrow(
+        "AI data sharing",
+      );
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(String(url)).toContain("/rpc/aiConsent/status");
+      expect(init?.body).not.toContain("private content");
+    }
+  });
+
+  it("explains the mobile upgrade requirement on an older self-hosted server", async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ error: { message: "Not found" } }, { status: 404 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("records mobile consent before submitting and uses the deployment policy URL", async () => {
+    vi.mocked(promptAiConsent).mockResolvedValue(true);
+    const calls: string[] = [];
+    const recipient = {
+      key: "provider",
+      name: "Example AI",
+      use: "model",
+      detail: "",
+      allowed: false,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        const path = new URL(String(url)).pathname;
+        calls.push(path);
+        return jsonResponse({
+          json: path.endsWith("/status")
+            ? {
+                scope: "account-space",
+                version: "2026-09-14",
+                recipients: [recipient],
+                privacyUrl: "https://example.com/privacy",
+              }
+            : { ok: true },
+        });
+      }),
+    );
+    await rpc("threads/send", { botId: "bot-1", text: "authorized content" });
+    expect(calls).toEqual(["/rpc/aiConsent/status", "/rpc/aiConsent/allow", "/rpc/threads/send"]);
+    expect(promptAiConsent).toHaveBeenLastCalledWith(recipient, "https://example.com/privacy");
   });
 
   it("rejects an oversized RPC response before parsing it", async () => {

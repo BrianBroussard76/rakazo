@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ComputerRef, SandboxProvider } from "@rakazo/adapter-kit";
-import type { AiConsentStatus } from "@rakazo/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { createApp } from "../../../apps/api/src/app.ts";
 import { computerTestSandbox } from "./computer-test-config.js";
@@ -118,15 +117,6 @@ describeLive("real model and sandbox computer journey", () => {
     };
     await installVisualFixture(handles.sandbox, computer);
 
-    const consent = await rpc<AiConsentStatus>(handles.app, cookie, "aiConsent/status", {
-      botId: bot.id,
-      uses: ["model", "memory"],
-    });
-    await rpc(handles.app, cookie, "aiConsent/allow", {
-      scope: consent.scope,
-      version: consent.version,
-      keys: consent.recipients.map((recipient) => recipient.key),
-    });
     const sent = await rpc<{ runId: string }>(handles.app, cookie, "threads/send", {
       botId: bot.id,
       text: [

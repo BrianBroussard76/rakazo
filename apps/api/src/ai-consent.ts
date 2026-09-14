@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import {
-  aiModelDisclosure,
   aiRecipient,
   cloudAgentsEnabled,
   parseModelSecret,
@@ -9,8 +8,12 @@ import {
   toStringRecord,
 } from "@rakazo/adapters";
 import type { Actor, AiConsentQuery, AiConsentStatus, AiRecipient } from "@rakazo/contracts";
-import { AI_CONSENT_REQUIRED, AI_DISCLOSURE_VERSION } from "@rakazo/contracts";
-import { findDefaultModelCredential, findModelCredential } from "@rakazo/db";
+import { AI_DISCLOSURE_VERSION, AI_PRIVACY_URL } from "@rakazo/contracts";
+import {
+  findDefaultModelCredential,
+  findDefaultVoiceCredential,
+  findModelCredential,
+} from "@rakazo/db";
 import type { RouterDeps } from "./router.js";
 import { resolveThreadTarget } from "./thread-target.js";
 
@@ -49,10 +52,14 @@ export async function aiConsentStatus(
           })
         : [],
       uses.includes("voice")
-        ? deps.prisma.spaceVoicePreference.findMany({
-            where: { userId: actor.userId, spaceId: actor.spaceId },
-            include: { credential: true },
-          })
+        ? query.uses
+          ? findDefaultVoiceCredential(deps.prisma, actor).then((credential) =>
+              credential ? [{ credential }] : [],
+            )
+          : deps.prisma.spaceVoicePreference.findMany({
+              where: { userId: actor.userId, spaceId: actor.spaceId },
+              include: { credential: true },
+            })
         : [],
       uses.includes("memory")
         ? deps.prisma.spaceMemoryConfig.findUnique({ where: { spaceId: actor.spaceId } })
@@ -91,17 +98,16 @@ export async function aiConsentStatus(
     );
     // Connected models remain reachable by helpers during a targeted bot run.
     for (const preference of preferences)
-      if (preference.modelId)
-        selected.push({
-          provider: preference.credential.provider,
-          id: preference.modelId,
-          credential: {
-            ...preference.credential,
-            isDefault: preference.isDefault,
-            defaultModel: preference.modelId,
-          },
-          thinkingLevel: null,
-        });
+      selected.push({
+        provider: preference.credential.provider,
+        id: preference.modelId ?? "",
+        credential: {
+          ...preference.credential,
+          isDefault: preference.isDefault,
+          defaultModel: preference.modelId,
+        },
+        thinkingLevel: null,
+      });
     if (deps.env.teamChatJudgeProvider && deps.env.teamChatJudgeModel) {
       selected.push({
         provider: deps.env.teamChatJudgeProvider,
@@ -118,7 +124,7 @@ export async function aiConsentStatus(
     const models = [
       ...new Map(
         selected
-          .filter((model) => model.provider && model.id)
+          .filter((model) => model.provider)
           .map((model) => [
             JSON.stringify([model.provider, model.id, model.credential?.secretId]),
             model,
@@ -142,26 +148,16 @@ export async function aiConsentStatus(
         return [secret.id, parsed.kind === "openai_compatible" ? parsed.baseUrl : undefined];
       }),
     );
-    const disclosures = await Promise.all(
-      models.map(async (model) => {
-        const input = {
+    for (const model of models) {
+      add(
+        aiRecipient({
           provider: model.provider!,
-          id: model.id!,
+          modelId: model.id!,
           baseUrl: model.credential ? baseUrls.get(model.credential.secretId) : undefined,
-        };
-        try {
-          return (await aiModelDisclosure(input)).recipient;
-        } catch {
-          // Keep settings (especially withdrawal) usable while one provider is unavailable.
-          return {
-            ...aiRecipient({ ...input, modelId: input.id, use: "model" })!,
-            unavailableReason:
-              "Could not verify this model's data recipients. Try again or choose a direct model connection.",
-          };
-        }
-      }),
-    );
-    disclosures.forEach(add);
+          use: "model",
+        }),
+      );
+    }
   }
   for (const voice of voices)
     add(aiRecipient({ provider: voice.credential.provider, use: "voice" }));
@@ -186,6 +182,7 @@ export async function aiConsentStatus(
       .update(JSON.stringify([actor.userId, actor.spaceId]))
       .digest("hex"),
     version: AI_DISCLOSURE_VERSION,
+    privacyUrl: deps.env.privacyPolicyUrl ?? AI_PRIVACY_URL,
     recipients: [...recipients.values()],
   };
 }
@@ -196,11 +193,7 @@ export async function allowAiConsent(
   input: { scope: string; version: string; keys: string[] },
 ) {
   const current = await aiConsentStatus(deps, actor);
-  const known = new Set(
-    current.recipients
-      .filter((recipient) => !recipient.unavailableReason)
-      .map((recipient) => recipient.key),
-  );
+  const known = new Set(current.recipients.map((recipient) => recipient.key));
   if (
     input.scope !== current.scope ||
     input.version !== current.version ||
@@ -234,18 +227,4 @@ export async function allowAiConsent(
       input.keys.includes(recipient.key) ? { ...recipient, allowed: true } : recipient,
     ),
   };
-}
-
-export async function requireModelConsent(
-  deps: RouterDeps,
-  actor: Actor,
-  target: { botId?: string; groupId?: string },
-) {
-  const status = await aiConsentStatus(deps, actor, { ...target, uses: ["model", "memory"] });
-  for (const recipient of status.recipients.filter((item) => item.use !== "voice")) {
-    if (!recipient.allowed)
-      throw new ORPCError("FORBIDDEN", {
-        message: recipient.unavailableReason ?? AI_CONSENT_REQUIRED,
-      });
-  }
 }

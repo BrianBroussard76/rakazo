@@ -2,7 +2,6 @@ import { StrictMode, useEffect, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
-import { AiDataConsentDialog } from "./components/AiDataConsent";
 import { DesktopUpdatesProvider } from "./components/DesktopUpdates";
 import { I18nBootstrap } from "./components/I18nBootstrap";
 import { applyUiDirection } from "./lib/apply-ui-direction";
@@ -38,7 +37,6 @@ createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <DesktopUpdatesProvider>
           <App />
-          <AiDataConsentDialog />
         </DesktopUpdatesProvider>
       </BrowserRouter>
     </I18nBootstrap>

@@ -145,21 +145,7 @@ export async function executeContactsJourney(
   recorder: ReturnType<typeof createContactsRecorder>,
   context: AdapterContext,
 ) {
-  // The live CLI requires explicit --live --record opt-in for this synthetic fixture.
-  // Bind that authorization to the selected model; it cannot authorize a fallback vendor.
-  const runtime = new PiAgentRuntime({
-    authorizeModel: async (selected) => {
-      if (
-        selected.provider !== model.provider ||
-        selected.id !== model.id ||
-        selected.baseUrl !== model.baseUrl
-      ) {
-        throw new Error("Recording model changed; review the selected model before recording.");
-      }
-      return {};
-    },
-  });
-  for await (const _event of runtime.run(
+  for await (const _event of new PiAgentRuntime().run(
     {
       botId: context.botId!,
       threadId: "fixture-thread",

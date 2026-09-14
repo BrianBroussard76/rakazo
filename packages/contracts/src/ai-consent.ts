@@ -25,15 +25,15 @@ export const AiRecipientSchema = z.object({
   name: z.string(),
   use: AiDataUseSchema,
   detail: z.string(),
-  privacyUrl: z.string().url(),
+  privacyUrl: z.string().url().optional(),
   allowed: z.boolean(),
-  unavailableReason: z.string().optional(),
 });
 export type AiRecipient = z.infer<typeof AiRecipientSchema>;
 export const AiConsentStatusSchema = z.object({
   scope: z.string(),
   version: z.string(),
   recipients: z.array(AiRecipientSchema),
+  privacyUrl: z.string().url().optional(),
 });
 export type AiConsentStatus = z.infer<typeof AiConsentStatusSchema>;
 export const AI_CONSENT_REQUIRED = "Review AI data sharing in Account settings before continuing.";

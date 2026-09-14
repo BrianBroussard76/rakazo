@@ -5,11 +5,6 @@ import {
   TRANSCRIPTION_RESPONSE_TIMEOUT_MS,
 } from "./dictation.js";
 
-vi.mock("./rpc", async (original) => ({
-  ...(await original<typeof import("./rpc")>()),
-  ensureWebAiConsent: vi.fn(async () => undefined),
-}));
-
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -75,7 +70,6 @@ describe("Dictation recorder fallback", () => {
       transcribe: true,
       onFinal: () => undefined,
     });
-    await vi.waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled());
     dictation.stop("cancel");
     grant({ getTracks: () => [track] });
     await listening;
@@ -513,39 +507,9 @@ describe("Dictation recorder fallback", () => {
 });
 
 describe("Dictation web speech", () => {
-  it("uses a configured transcription provider without starting browser recognition", async () => {
-    stubRecorderFallback(vi.fn());
-    const available = vi.fn(async () => "available");
-    const LocalRecognition = Object.assign(vi.fn(), { available });
-    Object.defineProperty(LocalRecognition.prototype, "processLocally", { value: false });
-    vi.stubGlobal("window", { SpeechRecognition: LocalRecognition });
-    const dictation = new Dictation();
-    await dictation.listen({ mode: "hold", transcribe: true, onFinal: vi.fn() });
-    expect(available).not.toHaveBeenCalled();
-    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
-    dictation.stop();
-  });
-  it("does not start on-device recognition without an installed language pack", async () => {
-    const create = vi.fn();
-    class UnavailableRecognition {
-      static available = vi.fn(async () => "downloadable");
-      constructor() {
-        create();
-      }
-    }
-    Object.defineProperty(UnavailableRecognition.prototype, "processLocally", { value: false });
-    vi.stubGlobal("window", { SpeechRecognition: UnavailableRecognition });
-    vi.stubGlobal("navigator", { language: "en-US" });
-    const dictation = new Dictation();
-    await dictation.listen({ mode: "endpoint", onFinal: vi.fn() });
-    expect(create).not.toHaveBeenCalled();
-    expect(dictation.state.status).toBe("idle");
-    expect(dictation.state.error).toContain("on-device dictation");
-  });
   it("restarts endpoint recognition after a quiet end", async () => {
     const instances: FakeRecognition[] = [];
     class FakeRecognition {
-      static available = vi.fn(async () => "available");
       continuous = false;
       interimResults = false;
       lang = "";
@@ -559,10 +523,6 @@ describe("Dictation web speech", () => {
         instances.push(this);
       }
     }
-    Object.defineProperty(FakeRecognition.prototype, "processLocally", {
-      value: false,
-      writable: true,
-    });
     vi.stubGlobal("window", { SpeechRecognition: FakeRecognition });
     vi.stubGlobal("navigator", { language: "en-US" });
 
@@ -570,7 +530,6 @@ describe("Dictation web speech", () => {
     await dictation.listen({ mode: "endpoint", onFinal: () => undefined });
     const rec = instances[0];
     expect(rec?.start).toHaveBeenCalledOnce();
-    expect((rec as unknown as { processLocally: boolean }).processLocally).toBe(true);
     rec?.onend?.();
     expect(rec?.start).toHaveBeenCalledTimes(2);
     expect(dictation.state.status).toBe("listening");

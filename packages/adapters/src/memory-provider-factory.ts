@@ -1,7 +1,5 @@
 import type { DurableMemoryScope, SemanticMemoryProvider } from "@rakazo/adapter-kit";
 import type { PrismaClient } from "@rakazo/db";
-import { requireAiConsent } from "@rakazo/db";
-import { aiRecipient } from "./ai-consent.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import {
   classifySerenityConnectionSettings,
@@ -153,10 +151,7 @@ function decodeCredentials(provider: string, plaintext: string): Record<string, 
 
 export class SpaceMemoryProviderResolver implements MemoryProviderResolver {
   constructor(
-    private readonly prisma: Pick<
-      PrismaClient,
-      "spaceMemoryConfig" | "deploymentSettings" | "aiDataConsent"
-    >,
+    private readonly prisma: Pick<PrismaClient, "spaceMemoryConfig" | "deploymentSettings">,
     private readonly secrets: EncryptedSecretStore,
   ) {}
 
@@ -179,26 +174,8 @@ export class SpaceMemoryProviderResolver implements MemoryProviderResolver {
       config.provider,
       this.secrets.load(config.secret.ciphertext, config.secret.id),
     );
-    const provider = createMemoryProvider(config.provider, settings, credentials);
-    const recipient = aiRecipient({
-      provider: config.provider,
-      use: "memory",
-      baseUrl: settings.baseUrl,
-    });
     return {
-      provider: {
-        describe: () => provider.describe(),
-        recall: async (request, context) => {
-          await requireAiConsent(this.prisma, context, recipient);
-          return provider.recall(request, context);
-        },
-        save: async (request, context) => {
-          await requireAiConsent(this.prisma, context, recipient);
-          return provider.save(request, context);
-        },
-        // Withdrawal must not prevent requests that delete previously shared data.
-        purgeHistory: (request, context) => provider.purgeHistory(request, context),
-      },
+      provider: createMemoryProvider(config.provider, settings, credentials),
       defaultScope: config.defaultMemoryScope === "shared" ? "shared" : "isolated",
     };
   }

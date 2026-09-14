@@ -2,10 +2,15 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import type { AvatarStyle } from "@rakazo/contracts";
 import { BotAvatar, Button, Field, FieldLabel, Input, Toggle } from "@rakazo/ui-web";
 import { ChevronDown } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
-import { AiDataSharingSettings } from "../components/AiDataConsent";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
 import { SuccessPop } from "../components/ai/primitives";
 import { ComputersUnavailableHint } from "../components/ComputersUnavailableHint";
@@ -13,10 +18,12 @@ import { DesktopUpdateSection } from "../components/DesktopUpdates";
 import { SoftwareUpdateSection } from "../components/SoftwareUpdateSection";
 import { authClient } from "../lib/auth";
 import { getActiveUiLocale, setUiLocale } from "../lib/i18n";
-import type { AppearancePreference } from "../lib/ui-appearance";
-import { getUiAppearancePreference, setUiAppearance } from "../lib/ui-appearance";
-import type { UiLocale } from "../lib/ui-locale";
-import { UI_LOCALE_LABELS, UI_LOCALES } from "../lib/ui-locale";
+import {
+  type AppearancePreference,
+  getUiAppearancePreference,
+  setUiAppearance,
+} from "../lib/ui-appearance";
+import { UI_LOCALE_LABELS, UI_LOCALES, type UiLocale } from "../lib/ui-locale";
 
 export type SettingsGeneralProps = {
   email?: string | null;
@@ -80,7 +87,6 @@ export function GeneralSettingsPanels({
       </section>
 
       <ChangePasswordSection email={email} />
-      <AiDataSharingSettings />
 
       {messagingEnabled && onOpenMessaging ? (
         <section className="rounded-xl border border-border px-4 py-4">

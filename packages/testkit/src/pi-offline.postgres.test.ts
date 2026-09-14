@@ -3,8 +3,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioEmulator } from "@rakazo/adapters";
-import type { AiConsentStatus } from "@rakazo/contracts";
-import { AI_CONSENT_REQUIRED } from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
 import { sessionCookieHeader } from "./index.js";
 import { startModelEmulator } from "./model-emulator.js";
@@ -94,22 +92,6 @@ describe.skipIf(!databaseAvailable)("offline Pi product journey", () => {
         botId: bot.id,
         modelProvider: model.model.provider,
         modelId: model.model.id,
-      });
-      const blocked = await handles.app.request("/rpc/threads/send", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie, origin: fixtureOrigin },
-        body: JSON.stringify({ json: { botId: bot.id, text: "Do not send" } }),
-      });
-      expect(blocked.status).toBe(403);
-      expect(await blocked.text()).toContain(AI_CONSENT_REQUIRED);
-      const consent = await rpc<AiConsentStatus>(handles.app, cookie, "aiConsent/status", {
-        botId: bot.id,
-        uses: ["model"],
-      });
-      await rpc(handles.app, cookie, "aiConsent/allow", {
-        scope: consent.scope,
-        version: consent.version,
-        keys: consent.recipients.map((recipient) => recipient.key),
       });
       const sent = await rpc<{ runId: string }>(handles.app, cookie, "threads/send", {
         botId: bot.id,
