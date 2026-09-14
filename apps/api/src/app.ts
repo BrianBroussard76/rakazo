@@ -12,6 +12,7 @@ import type {
   TransactionalEmailProvider,
 } from "@rakazo/adapter-kit";
 import {
+  aiModelDisclosure,
   applyMessagingOutboundStatus,
   ChatSdkMessagingSurface,
   ComposioConnector,
@@ -68,6 +69,7 @@ import {
   createThreadEvents,
   type PrismaClient,
   provisionMessagingIdentity,
+  requireAiConsent,
   requireMembership,
 } from "@rakazo/db";
 import {
@@ -277,6 +279,11 @@ export async function createApp(
     env.agentRuntime === "scripted"
       ? new ScriptedAgentRuntime()
       : new PiAgentRuntime({
+          authorizeModel: async (model, context) => {
+            const disclosure = await aiModelDisclosure(model);
+            await requireAiConsent(prisma, context, disclosure.recipient);
+            return disclosure.payloadFields;
+          },
           sessionRoot: env.piSessionRecording ? piSessionsRoot(env.dataDir) : undefined,
         });
   const notifications = new ExpoPushProvider(env.dataDir);
@@ -398,6 +405,7 @@ export async function createApp(
   reconciler?.start();
 
   const router = createRouter({
+    cloudAgent,
     prisma,
     events,
     auth,
@@ -424,6 +432,8 @@ export async function createApp(
       agentRuntime: env.agentRuntime,
       defaultProvider: env.defaultProvider,
       defaultModel: env.defaultModel,
+      teamChatJudgeProvider: env.teamChatJudgeProvider,
+      teamChatJudgeModel: env.teamChatJudgeModel,
       deploymentModelKey: env.deploymentModelKey,
       webOrigin: env.webOrigin,
       screenProxySecret: env.screenProxySecret,

@@ -11,6 +11,9 @@ import type {
   SpaceNavigation,
 } from "@rakazo/contracts";
 import {
+  aiConsentTarget,
+  aiDataUsesForProcedure,
+  ensureAiDataConsent,
   isRunTerminalEvent,
   mergeThreadHistory,
   prependThreadHistoryPage,
@@ -26,6 +29,7 @@ import {
   upsertMessageById,
 } from "@rakazo/core";
 import * as SecureStore from "expo-secure-store";
+import { promptAiConsent } from "./ai-consent";
 import { defaultApiBase, type EndpointResult, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
@@ -482,6 +486,20 @@ export async function rpc<T>(
     requestContext?: ApiRequestContext;
   } = {},
 ): Promise<T> {
+  const uses = aiDataUsesForProcedure(proc);
+  const consentContext =
+    options.requestContext ?? (uses.length ? await captureApiRequestContext() : undefined);
+  await ensureAiDataConsent({
+    uses,
+    status: () =>
+      rpc(
+        "aiConsent/status",
+        { uses, ...aiConsentTarget(body) },
+        { requestContext: consentContext },
+      ),
+    prompt: promptAiConsent,
+    allow: (input) => rpc("aiConsent/allow", input, { requestContext: consentContext }),
+  });
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (options.signal?.aborted) abort();
@@ -489,12 +507,12 @@ export async function rpc<T>(
   const timer =
     options.timeoutMs === null ? undefined : setTimeout(abort, options.timeoutMs ?? RPC_TIMEOUT_MS);
   try {
-    const res = await fetch(`${options.requestContext?.apiBase ?? currentApiBase()}/rpc/${proc}`, {
+    const res = await fetch(`${consentContext?.apiBase ?? currentApiBase()}/rpc/${proc}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         origin: "rakazo://",
-        ...(options.requestContext?.headers ?? (await authHeaders())),
+        ...(consentContext?.headers ?? (await authHeaders())),
       },
       body: JSON.stringify({ json: body }),
       signal: controller.signal,

@@ -1,6 +1,11 @@
 import type { JobPublisher, JobWorkerHost } from "@rakazo/adapter-kit";
-import { ComposioConnector, IntegrationProviderSettings } from "@rakazo/adapters";
+import {
+  aiModelDisclosure,
+  ComposioConnector,
+  IntegrationProviderSettings,
+} from "@rakazo/adapters";
 import { loadRootEnv } from "@rakazo/core/node/load-root-env";
+import { requireAiConsent } from "@rakazo/db";
 
 loadRootEnv();
 
@@ -67,7 +72,14 @@ async function main() {
   const runtime =
     process.env.AGENT_RUNTIME === "scripted"
       ? new ScriptedAgentRuntime()
-      : new PiAgentRuntime({ sessionRoot: resolvePiSessionRoot(dataDir) });
+      : new PiAgentRuntime({
+          authorizeModel: async (model, context) => {
+            const disclosure = await aiModelDisclosure(model);
+            await requireAiConsent(prisma, context, disclosure.recipient);
+            return disclosure.payloadFields;
+          },
+          sessionRoot: resolvePiSessionRoot(dataDir),
+        });
   // Same resolver the API uses, so both processes agree on provider, model and key.
   const { key: deploymentModelKey } = resolveDeploymentModel();
   const sandboxProvider = resolveSandboxProvider(process.env);

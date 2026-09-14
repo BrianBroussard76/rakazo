@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type AgentRuntime, type JobPublisher, runJobKey } from "@rakazo/adapter-kit";
 import { MessagingTeamChatEmulator } from "@rakazo/adapters";
-import type { ModelConnectInput, RunStatus } from "@rakazo/contracts";
+import type { AiConsentStatus, ModelConnectInput, RunStatus } from "@rakazo/contracts";
 import { ACTIVE_RUN_STATUSES, isTerminal } from "@rakazo/core";
 import type { createDb } from "@rakazo/db";
 import { sessionCookieHeader } from "../index.js";
@@ -117,6 +117,12 @@ export async function runTrial(
       if (!signup.ok) throw new EvalFailure("harness", `Fixture signup failed (${signup.status})`);
       cookie = sessionCookieHeader(signup);
       await rpc(app, cookie, "models/connect", options.connection);
+      const consent = await rpc<AiConsentStatus>(app, cookie, "aiConsent/status", {});
+      await rpc(app, cookie, "aiConsent/allow", {
+        scope: consent.scope,
+        version: consent.version,
+        keys: consent.recipients.map((recipient) => recipient.key),
+      });
       for (const provider of scenario.connections ?? ["GMAIL", "CRM", "GITHUB"])
         await rpc(app, cookie, "connections/begin", {
           connectorId: "composio",

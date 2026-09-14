@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioEmulator, FakeSandboxProvider } from "@rakazo/adapters";
+import type { AiConsentStatus } from "@rakazo/contracts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "./index.js";
 import { type ModelEmulatorStep, startModelEmulator } from "./model-emulator.js";
@@ -161,6 +162,15 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
             matchKind: "tool",
             matchValue: "computer_act",
           },
+        });
+        const consent = await rpc<AiConsentStatus>(handles.app, cookie, "aiConsent/status", {
+          botId: bot.id,
+          uses: ["model"],
+        });
+        await rpc(handles.app, cookie, "aiConsent/allow", {
+          scope: consent.scope,
+          version: consent.version,
+          keys: consent.recipients.map((recipient) => recipient.key),
         });
         const sent = await rpc<{ runId: string }>(handles.app, cookie, "threads/send", {
           botId: bot.id,

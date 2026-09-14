@@ -7,8 +7,15 @@ import type {
 import { CloudAgentRequestRejected, runContinueJob } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
 import { cloudAgentHttpsUrl } from "@rakazo/core";
-import { appendEventInTransaction, type CloudAgent, Prisma } from "@rakazo/db";
+import {
+  AiConsentRequired,
+  appendEventInTransaction,
+  type CloudAgent,
+  Prisma,
+  requireAiConsent,
+} from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
+import { aiRecipient } from "./ai-consent.js";
 import { cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { type CloudAgentDeps, cloudAgentBlock, enqueueCloudAgent } from "./cloud-agent-service.js";
 import { cloudAgentLaunchSchema, cloudAgentPromptSchema } from "./cloud-agent-tools.js";
@@ -69,6 +76,12 @@ export async function pollCloudAgent(
       return;
     }
     if (!agent.remoteId) {
+      if (!provider.describe().capabilities.offline)
+        await requireAiConsent(
+          deps.prisma,
+          context,
+          aiRecipient({ provider: provider.describe().id, use: "model" }),
+        );
       // Write dispatch intent before I/O; a crash replays the same idempotent create.
       const marked = await deps.prisma.cloudAgent.updateMany({
         where: fence(agent),
@@ -143,6 +156,12 @@ export async function pollCloudAgent(
           followupDispatching: false,
         });
       } else {
+        if (!provider.describe().capabilities.offline)
+          await requireAiConsent(
+            deps.prisma,
+            context,
+            aiRecipient({ provider: provider.describe().id, use: "model" }),
+          );
         const marked = await deps.prisma.cloudAgent.updateMany({
           where: fence(agent),
           data: { followupDispatching: true },
@@ -175,7 +194,16 @@ export async function pollCloudAgent(
     // A specific run cannot regress to stale agent-level metadata after a follow-up.
     const snapshot = await provider.get(agent.remoteId, context, agent.latestRunId ?? undefined);
     await finishPoll(deps, agent, snapshotData(snapshot));
-  } catch {
+  } catch (error) {
+    if (error instanceof AiConsentRequired) {
+      await finishPoll(deps, agent, {
+        status: "failed",
+        launchRequest: {},
+        followup: Prisma.DbNull,
+        followupDispatching: false,
+      });
+      return;
+    }
     // Provider response bodies and secrets never enter logs, cards, or model context.
     getLogger().warn("cloud agent operation deferred to reconciliation");
     await retryPoll(deps, agent);

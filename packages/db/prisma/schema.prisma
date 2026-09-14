@@ -7,7 +7,21 @@ datasource db {
   provider = "postgresql"
 }
 
+model AiDataConsent {
+  userId String
+  spaceId String
+  recipientKey String
+  version String
+  grantedAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, spaceId, recipientKey])
+  @@map("ai_data_consents")
+}
+
 model User {
+  aiDataConsents AiDataConsent[]
   id                          String                       @id
   name                        String
   email                       String
@@ -146,6 +160,7 @@ model Member {
 }
 
 model Space {
+  aiDataConsents AiDataConsent[]
   id                          String                       @id
   organizationId              String
   organization                Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)

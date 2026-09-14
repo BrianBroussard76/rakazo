@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, BackgroundJob, JobPublisher } from "@rakazo/adapter-kit";
+import { AI_DISCLOSURE_VERSION } from "@rakazo/contracts";
 import { clearThread, createDb, type PrismaClient } from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { aiRecipient } from "./ai-consent.js";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { executeCloudAgentTool, reconcileCloudAgents } from "./cloud-agent-service.js";
@@ -83,6 +85,15 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
       spaceId: id,
       provider: new CursorCloudAgentProvider({ apiKey: "fake-key", fetch: wire.fetch }),
     };
+    await prisma.aiDataConsent.create({
+      data: {
+        userId: id,
+        spaceId: id,
+        version: AI_DISCLOSURE_VERSION,
+        recipientKey: aiRecipient({ provider: connection.provider.describe().id, use: "model" })!
+          .key,
+      },
+    });
     const enqueue = vi.fn(async (_job: BackgroundJob) => undefined);
     const jobs: JobPublisher = {
       enqueue,
@@ -147,6 +158,37 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
       finish,
     };
   }
+
+  it("stops a launch without permission before dispatch", async () => {
+    const h = await setup();
+    await prisma.aiDataConsent.deleteMany({ where: { userId: h.id } });
+    const id = await h.launch();
+    await h.poll(id);
+    expect(await h.state(id)).toMatchObject({
+      status: "failed",
+      nextPollAt: null,
+      launchDispatched: false,
+    });
+    expect(h.wire.requests).toHaveLength(0);
+  });
+
+  it("stops a queued follow-up after permission is withdrawn", async () => {
+    const h = await setup();
+    const id = await h.launch();
+    await h.poll(id);
+    await h.finish(id);
+    await h.tool("reply", { id, prompt: "Add tests" });
+    await prisma.aiDataConsent.deleteMany({ where: { userId: h.id } });
+    const requests = h.wire.requests.length;
+    await h.poll(id);
+    expect(await h.state(id)).toMatchObject({
+      status: "failed",
+      nextPollAt: null,
+      followup: null,
+      followupDispatching: false,
+    });
+    expect(h.wire.requests).toHaveLength(requests);
+  });
 
   it("persists before remote I/O, launches once, and wakes exactly once per generation", async () => {
     const h = await setup();

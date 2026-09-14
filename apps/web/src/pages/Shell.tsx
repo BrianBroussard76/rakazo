@@ -1994,6 +1994,7 @@ export function ShellPage() {
         } else if (botTarget && activeBotId.current === botTarget) {
           setSendError(error instanceof Error ? error.message : t`Failed to send message`);
         }
+        throw error;
       } finally {
         setSending(false);
       }
@@ -4547,7 +4548,11 @@ const Composer = memo(function Composer({
     setSelectedSkill(null);
     const mentions = selectedMentions;
     setSelectedMentions([]);
-    void onSend(text, mentions);
+    void onSend(text, mentions).catch(() => {
+      setDraft((current) => current || draft);
+      setSelectedSkill((current) => current ?? selectedSkill);
+      setSelectedMentions((current) => (current.length ? current : mentions));
+    });
   }
 
   function handleDragEnter(event: DragEvent<HTMLFieldSetElement>) {

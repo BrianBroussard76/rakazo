@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { Link } from "react-router-dom";
+import { AiDataSharingSettings } from "../components/AiDataConsent";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
 import { SuccessPop } from "../components/ai/primitives";
 import { ComputersUnavailableHint } from "../components/ComputersUnavailableHint";
@@ -87,6 +88,7 @@ export function GeneralSettingsPanels({
       </section>
 
       <ChangePasswordSection email={email} />
+      <AiDataSharingSettings />
 
       {messagingEnabled && onOpenMessaging ? (
         <section className="rounded-xl border border-border px-4 py-4">

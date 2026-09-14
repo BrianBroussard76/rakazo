@@ -5,6 +5,11 @@ import {
   TRANSCRIPTION_RESPONSE_TIMEOUT_MS,
 } from "./dictation.js";
 
+vi.mock("./rpc", async (original) => ({
+  ...(await original<typeof import("./rpc")>()),
+  ensureWebAiConsent: vi.fn(async () => undefined),
+}));
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -70,6 +75,7 @@ describe("Dictation recorder fallback", () => {
       transcribe: true,
       onFinal: () => undefined,
     });
+    await vi.waitFor(() => expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled());
     dictation.stop("cancel");
     grant({ getTracks: () => [track] });
     await listening;
@@ -523,6 +529,10 @@ describe("Dictation web speech", () => {
         instances.push(this);
       }
     }
+    Object.defineProperty(FakeRecognition.prototype, "processLocally", {
+      value: false,
+      writable: true,
+    });
     vi.stubGlobal("window", { SpeechRecognition: FakeRecognition });
     vi.stubGlobal("navigator", { language: "en-US" });
 
@@ -530,6 +540,7 @@ describe("Dictation web speech", () => {
     await dictation.listen({ mode: "endpoint", onFinal: () => undefined });
     const rec = instances[0];
     expect(rec?.start).toHaveBeenCalledOnce();
+    expect((rec as unknown as { processLocally: boolean }).processLocally).toBe(true);
     rec?.onend?.();
     expect(rec?.start).toHaveBeenCalledTimes(2);
     expect(dictation.state.status).toBe("listening");

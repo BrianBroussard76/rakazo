@@ -1,4 +1,5 @@
 import { readBoundedResponseBytes } from "@rakazo/core";
+import { ensureWebAiConsent } from "./rpc";
 import { selectedSpaceId, withSpaceHeaders } from "./rpc.js";
 
 export type DictationMode = "hold" | "endpoint";
@@ -12,6 +13,7 @@ export type DictationSnapshot = {
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 interface SpeechRecognitionLike {
+  processLocally?: boolean;
   continuous: boolean;
   interimResults: boolean;
   lang: string;
@@ -32,7 +34,8 @@ const ENDPOINT_UNSUPPORTED =
   "This browser can't detect when you stop talking. Use Chrome, the desktop app, or hold-to-talk in the composer.";
 
 export function webSpeechAvailable(): boolean {
-  return Boolean(speechRecognitionCtor());
+  const Ctor = speechRecognitionCtor();
+  return Boolean(Ctor && "processLocally" in Ctor.prototype);
 }
 
 function speechRecognitionCtor(): SpeechRecognitionCtor | undefined {
@@ -131,6 +134,16 @@ export class Dictation {
       return;
     }
     if (opts.transcribe) {
+      try {
+        await ensureWebAiConsent(["voice"], spaceId);
+      } catch (error) {
+        this.set({
+          ...IDLE,
+          error: error instanceof Error ? error.message : "AI permission required.",
+        });
+        return;
+      }
+      if (this.token !== mine) return;
       await this.listenRecorder(mine, opts.mode, opts.endpointMs ?? 850, spaceId);
       return;
     }
@@ -145,6 +158,7 @@ export class Dictation {
     const Ctor = speechRecognitionCtor();
     if (!Ctor) return;
     const rec = new Ctor();
+    rec.processLocally = true;
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = navigator.language || "en-US";

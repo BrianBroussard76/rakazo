@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioEmulator } from "@rakazo/adapters";
+import type { AiConsentStatus } from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
 import { sessionCookieHeader } from "./index.js";
 import { startModelEmulator } from "./model-emulator.js";
@@ -92,6 +93,18 @@ describe.skipIf(!databaseAvailable)("offline Pi product journey", () => {
         botId: bot.id,
         modelProvider: model.model.provider,
         modelId: model.model.id,
+      });
+      await expect(
+        rpc(handles.app, cookie, "threads/send", { botId: bot.id, text: "Do not send" }),
+      ).rejects.toThrow("403");
+      const consent = await rpc<AiConsentStatus>(handles.app, cookie, "aiConsent/status", {
+        botId: bot.id,
+        uses: ["model"],
+      });
+      await rpc(handles.app, cookie, "aiConsent/allow", {
+        scope: consent.scope,
+        version: consent.version,
+        keys: consent.recipients.map((recipient) => recipient.key),
       });
       const sent = await rpc<{ runId: string }>(handles.app, cookie, "threads/send", {
         botId: bot.id,

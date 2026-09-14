@@ -1,8 +1,10 @@
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
-import type { AppContract } from "@rakazo/contracts";
+import type { AiDataUse, AppContract } from "@rakazo/contracts";
 import { LOCAL_SETTINGS_PAGE, LOCAL_SETTINGS_RPC } from "@rakazo/contracts";
+import { aiConsentTarget, aiDataUsesForProcedure, ensureAiDataConsent } from "@rakazo/core";
+import { promptAiConsent } from "./ai-consent";
 import { desktopBridge } from "./desktop";
 
 const SPACE_STORAGE_KEY = "rakazo:space-id";
@@ -69,6 +71,10 @@ const link = new RPCLink<RpcClientContext>({
     }
     const spaceId =
       options.context.spaceId === undefined ? selectedSpaceId() : options.context.spaceId;
+    const uses = aiDataUsesForProcedure(new URL(request.url).pathname.replace(/^\/rpc\//, ""));
+    const body =
+      uses.length && request.method === "POST" ? await request.clone().json() : undefined;
+    await ensureWebAiConsent(uses, spaceId, body?.json);
     return fetch(request, {
       headers: withSpaceHeaders(request.headers, spaceId),
       credentials: "include",
@@ -77,3 +83,17 @@ const link = new RPCLink<RpcClientContext>({
 });
 
 export const rpc: ContractRouterClient<AppContract, RpcClientContext> = createORPCClient(link);
+
+export async function ensureWebAiConsent(
+  uses: AiDataUse[],
+  spaceId: string | null = selectedSpaceId(),
+  input?: unknown,
+) {
+  await ensureAiDataConsent({
+    uses,
+    status: () =>
+      rpc.aiConsent.status({ uses, ...aiConsentTarget(input) }, { context: { spaceId } }),
+    prompt: promptAiConsent,
+    allow: (input) => rpc.aiConsent.allow(input, { context: { spaceId } }),
+  });
+}

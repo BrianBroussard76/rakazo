@@ -89,6 +89,10 @@ export function maxToolCallsPerTurn(env: NodeJS.ProcessEnv = process.env): numbe
 }
 
 export interface PiAgentRuntimeOptions {
+  authorizeModel?: (
+    model: AgentRunRequest["model"],
+    context: Partial<AdapterContext>,
+  ) => Promise<Record<string, unknown>>;
   /** Directory where Pi JSONL sessions are written. Omit to disable recording. */
   sessionRoot?: string;
 }
@@ -96,7 +100,7 @@ export interface PiAgentRuntimeOptions {
 export class PiAgentRuntime implements AgentRuntime {
   private readonly sessionRecorder?: PiSessionRecorder;
 
-  constructor(options: PiAgentRuntimeOptions = {}) {
+  constructor(private readonly options: PiAgentRuntimeOptions = {}) {
     this.sessionRecorder = options.sessionRoot
       ? new PiJsonlSessionRecorder(options.sessionRoot)
       : undefined;
@@ -168,6 +172,8 @@ export class PiAgentRuntime implements AgentRuntime {
         const host: ToolHost = {
           queue,
           request,
+          authorizeModel: (selected) =>
+            this.options.authorizeModel?.(selected, context ?? {}) ?? Promise.resolve({}),
           models,
           model,
           apiKey,
@@ -230,7 +236,13 @@ export class PiAgentRuntime implements AgentRuntime {
           sessionId: `${request.threadId}:${request.botId}`,
           steeringMode: "all",
           streamFn: (m, ctx, options) =>
-            models.streamSimple(m, ctx, reliableStreamOptions(m, options)),
+            models.streamSimple(m, ctx, {
+              ...reliableStreamOptions(m, options),
+              onPayload: async (payload) => ({
+                ...(payload as Record<string, unknown>),
+                ...(await host.authorizeModel(request.model)),
+              }),
+            }),
           getApiKey: async () => apiKey,
           transformContext: async (messages) => pruneComputerScreenshotContext(messages),
           prepareNextTurnWithContext: async () => {
@@ -965,7 +977,13 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   };
   const nested = new Agent({
     streamFn: (m, ctx, options) =>
-      selectedModel.models.streamSimple(m, ctx, reliableStreamOptions(m, options)),
+      selectedModel.models.streamSimple(m, ctx, {
+        ...reliableStreamOptions(m, options),
+        onPayload: async (payload) => ({
+          ...(payload as Record<string, unknown>),
+          ...(await host.authorizeModel(requestModel)),
+        }),
+      }),
     getApiKey: async () => selectedModel.apiKey,
     transformContext: async (messages) => pruneComputerScreenshotContext(messages),
     initialState: {
@@ -1354,6 +1372,7 @@ interface EventQueue {
 }
 
 interface ToolHost {
+  authorizeModel(model: AgentRunRequest["model"]): Promise<Record<string, unknown>>;
   queue: EventQueue;
   request: AgentRunRequest;
   models: Models;
