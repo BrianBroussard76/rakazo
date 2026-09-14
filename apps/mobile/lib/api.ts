@@ -14,6 +14,7 @@ import type { ThreadHistory } from "@rakazo/core";
 import {
   aiConsentTarget,
   aiDataUsesForProcedure,
+  cancelResponseBody,
   ensureAiDataConsent,
   isRunTerminalEvent,
   mergeThreadHistory,
@@ -599,7 +600,7 @@ export async function rpc<T>(
       signal: controller.signal,
     });
     if (proc === "aiConsent/status" && res.status === 404) {
-      await res.body?.cancel();
+      cancelResponseBody(res);
       throw new Error(t("Update your server to use AI data sharing in this mobile version."));
     }
     const parsed = await readBoundedJsonResponse<{ json?: T; error?: { message?: string } }>(

@@ -394,6 +394,23 @@ describe("mobile API authentication", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it.each(["throws", "rejects", "stalls"])(
+    "reports the upgrade message when body cancellation %s",
+    async (mode) => {
+      const cancel = vi.fn(() => {
+        if (mode === "throws") throw new Error("cancel failed");
+        if (mode === "rejects") return Promise.reject(new Error("cancel failed"));
+        return new Promise<void>(() => {});
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ status: 404, body: { cancel } })),
+      );
+      await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
+
   it("records mobile consent before submitting and uses the deployment policy URL", async () => {
     vi.mocked(promptAiConsent).mockResolvedValue(true);
     const calls: string[] = [];
