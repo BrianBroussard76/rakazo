@@ -598,16 +598,17 @@ export async function rpc<T>(
       body: JSON.stringify({ json: body }),
       signal: controller.signal,
     });
+    if (proc === "aiConsent/status" && res.status === 404) {
+      await res.body?.cancel();
+      throw new Error(t("Update your server to use AI data sharing in this mobile version."));
+    }
     const parsed = await readBoundedJsonResponse<{ json?: T; error?: { message?: string } }>(
       res,
       MAX_MOBILE_RPC_RESPONSE_BYTES,
       controller.signal,
     );
     if (!res.ok || parsed.error) {
-      const message =
-        proc === "aiConsent/status" && res.status === 404
-          ? t("Update your server to use AI data sharing in this mobile version.")
-          : (parsed.error?.message ?? `rpc ${proc} failed`);
+      const message = parsed.error?.message ?? `rpc ${proc} failed`;
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:

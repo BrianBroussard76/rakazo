@@ -383,9 +383,11 @@ describe("mobile API authentication", () => {
     }
   });
 
-  it("explains the mobile upgrade requirement on an older self-hosted server", async () => {
+  it.each([true, false])("explains the mobile upgrade requirement with JSON=%s", async (json) => {
     const fetchMock = vi.fn(async () =>
-      jsonResponse({ error: { message: "Not found" } }, { status: 404 }),
+      json
+        ? jsonResponse({ error: { message: "Not found" } }, { status: 404 })
+        : new Response("404 Not Found", { status: 404 }),
     );
     vi.stubGlobal("fetch", fetchMock);
     await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
