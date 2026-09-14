@@ -10,7 +10,7 @@ export const AI_DATA_DISCLOSURES: Record<AiDataUse, string> = {
   voice:
     "Audio you record is sent for transcription. Text you choose to play, including bot responses, is sent to generate speech.",
   memory:
-    "Conversation summaries, saved memories, and search queries are sent to store and retrieve context for your bots.",
+    "Conversation summaries, saved memories, search queries, and bot and Space identifiers are sent to store and retrieve context for your bots.",
 };
 export const AiConsentQuerySchema = z
   .object({

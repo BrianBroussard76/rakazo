@@ -14,6 +14,10 @@
 - Deploy the website policy with the app update. Confirm the App Store privacy-policy URL.
 - Review App Store Connect's App Privacy responses against the actual deployed data flows,
   including user content, audio, identifiers, diagnostics, purposes, and account linkage.
+- Specifically assess Photos or Videos for retained image attachments and Audio Data for voice
+  processing. Apple's collection definition includes access beyond the real-time request by
+  the app or its partners; verify provider retention before selecting the audio answer.
+  See [Apple's App Privacy definitions](https://developer.apple.com/app-store/app-privacy-details/).
 - Run Expo's dependency compatibility check before creating a fresh iOS store build.
 
 ## Verification

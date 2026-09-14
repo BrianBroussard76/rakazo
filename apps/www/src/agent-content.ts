@@ -53,7 +53,7 @@ Last updated: September 14, 2026
 
 Rakazo processes account details, user-provided bot content, connection information, and technical records needed to operate and secure the service. Content comes from what you enter, upload, record, or authorize your bots to access. Rakazo does not sell personal information or use Rakazo content for third-party advertising.
 
-Before AI processing, Rakazo names the configured recipients, explains the data and purpose, and asks permission. Messages, relevant history, instructions, memories, attachments, screenshots, and connected-app content may be sent to model services for responses and tasks, including scheduled tasks. Recorded audio may be sent for transcription and text for speech generation. Conversation summaries, memories, and queries may be sent to a configured memory service.
+Before AI processing, Rakazo names the configured recipients, explains the data and purpose, and asks permission. Messages, relevant history, instructions, memories, attachments, screenshots, and connected-app content may be sent to model services for responses and tasks, including scheduled tasks. Recorded audio may be sent for transcription and text for speech generation. Conversation summaries, memories, queries, and bot and Space identifiers may be sent to a configured memory service.
 
 Supported connections include OpenAI, Anthropic, Google, OpenRouter, Cursor, custom model servers, ElevenLabs, Cartesia, Fish Audio, and Supermemory. The in-app disclosure identifies the actual configuration. OpenRouter forwards requests to model hosts named in that disclosure; Rakazo restricts routing to those hosts and excludes routes that permit data collection under OpenRouter's routing policy. This is not a zero-retention promise.
 
