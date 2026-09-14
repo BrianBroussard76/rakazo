@@ -169,6 +169,8 @@ model Space {
   createdByUserId             String?
   createdByUser               User?                        @relation("SpaceCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt                   DateTime                     @default(now())
+  deletingAt                  DateTime?
+  deletionClaimId             String?
   memberships                 SpaceMember[]
   bots                        Bot[]
   botSections                 BotSection[]
@@ -268,6 +270,7 @@ model UserModelCredential {
   provider    String
   label       String
   secretId    String
+  supportsImages Boolean              @default(false)
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   preferences SpaceModelPreference[]
@@ -331,6 +334,7 @@ model SpaceVoicePreference {
 }
 
 model Bot {
+  screenGeneration Int @default(0)
   id                String            @id @default(cuid())
   spaceId           String
   space             Space             @relation(fields: [spaceId], references: [id], onDelete: Cascade)
@@ -495,7 +499,6 @@ model Message {
   replies          Message[] @relation("MessageReplies")
   runId            String?
   clientNonce      String?
-  thumbsUp         Boolean   @default(false)
   sourceRuns            Run[]             @relation("RunSourceMessage")
   externalTranscriptFor  ExternalMessage?
   steeringMessages SteeringMessage[]
@@ -898,6 +901,7 @@ model ComputerUpdate {
 }
 
 model Computer {
+  screenGeneration Int @default(0)
   id                      String                   @id @default(cuid())
   spaceId                 String
   space                   Space                    @relation(fields: [spaceId], references: [id], onDelete: Cascade)

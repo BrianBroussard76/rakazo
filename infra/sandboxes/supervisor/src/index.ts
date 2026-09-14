@@ -19,22 +19,26 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import {
+  assertVolumeSubpathSupport,
   COMPUTER_GID,
   COMPUTER_IMAGE,
   COMPUTER_UID,
   COMPUTER_USER,
+  computerHomeStorage,
   computerNetworkNameFor,
   computerNetworkNamesForCleanup,
   computerResourceLimits,
   containerCreateOptions,
   containerNameFor,
   controlPortPublicationMatches,
+  homeVolumeMatches,
   hostComputerUser,
   legacyNetworkOwnedSolelyBy,
   publishedLoopbackControlHostPort,
   resolveComputerControlEndpoint,
   resolveScreenNetworkMode,
   resolveScreenPublishTarget,
+  resolveSpaceComputerLimit,
   resolveTeamScreenLimit,
   SCREEN_HOST,
   screenPorts,
@@ -171,7 +175,10 @@ app.post("/computers", async (c) => {
       // do so as the same user, but a root supervisor must never create or chown
       // user-controlled paths at runtime; Compose data-init handles legacy data.
       if (hostUid !== 0) await mkdir(serviceHomePath, { recursive: true });
-      const homePath = hostHomePath(serviceHomePath, runtimeInfo);
+      const storage = computerHomeStorage(serviceHomePath, dataDir, runtimeInfo);
+      if (storage.homeVolume) {
+        assertVolumeSubpathSupport((await docker.version()).ApiVersion);
+      }
       const computerUser = runtimeInfo ? COMPUTER_USER : hostComputerUser(hostUid, hostGid);
       const existing = await findBotContainer(body.botId, body.spaceId);
       if (existing) {
@@ -185,7 +192,8 @@ app.post("/computers", async (c) => {
           info.Image === desired.Id &&
           (!networkMode || info.HostConfig.NetworkMode === networkMode) &&
           info.Config.User === computerUser &&
-          controlPublishOk
+          controlPublishOk &&
+          (!storage.homeVolume || homeVolumeMatches(info.HostConfig.Mounts, storage.homeVolume))
         ) {
           if (!info.State.Running) await existing.start();
           return c.json({
@@ -195,53 +203,76 @@ app.post("/computers", async (c) => {
           });
         }
       }
-      // Existing containers with the current image already use the selected user.
-      // Before replacing or creating a container, validate its home without
-      // privileged filesystem mutations that could escape via concurrent renames.
-      // Match hostComputerUser(): missing/root host identity falls back to 1000:1000.
-      const effectiveUid =
-        runtimeInfo || hostUid === undefined || hostGid === undefined || hostUid === 0
-          ? COMPUTER_UID
-          : hostUid;
-      const effectiveGid =
-        runtimeInfo || hostUid === undefined || hostGid === undefined || hostUid === 0
-          ? COMPUTER_GID
-          : hostGid;
-      await assertComputerHomeWritable(serviceHomePath, effectiveUid, effectiveGid);
-      const name = containerNameFor(body.botId);
-      const createdNetwork =
-        screenNetworkMode === "internal" ? undefined : await ensureBotNetwork(body.botId);
-      let container: Docker.Container | undefined;
-      try {
-        if (existing) {
-          await existing.remove({ force: true }).catch(() => undefined);
+
+      // Under a space cap, serialize count+create and incompatible replace (remove+create)
+      // per space inside the bot lock. Replacements skip the admission check but still
+      // take the lock so a temporary free slot cannot be stolen by another bot's create.
+      // Lock order is always bot → space; never take a bot lock while holding a space lock.
+      const spaceComputerLimit = resolveSpaceComputerLimit();
+      const createComputer = async () => {
+        if (!existing && spaceComputerLimit > 0) {
+          const currentCount = await countSpaceContainers(body.spaceId);
+          if (currentCount >= spaceComputerLimit) {
+            return c.json(
+              { error: `Computer limit reached for space (max: ${spaceComputerLimit})` },
+              429,
+            );
+          }
         }
-        container = await docker.createContainer(
-          containerCreateOptions({
-            name,
-            image: COMPUTER_IMAGE,
-            botId: body.botId,
-            spaceId: body.spaceId,
-            homePath,
-            user: computerUser,
-            networkMode,
-            controlToken: randomUUID(),
-            publishControlPort: controlViaLoopback,
-          }),
-        );
-        await container.start();
-      } catch (error) {
-        // Never force removal: a lost start response may hide a running computer.
-        // Docker also refuses network removal while any endpoint is attached.
-        await container?.remove().catch(() => undefined);
-        await createdNetwork?.remove().catch(() => undefined);
-        throw error;
+
+        // Existing containers with the current image already use the selected user.
+        // Before replacing or creating a container, validate its home without
+        // privileged filesystem mutations that could escape via concurrent renames.
+        // Match hostComputerUser(): missing/root host identity falls back to 1000:1000.
+        const effectiveUid =
+          runtimeInfo || hostUid === undefined || hostGid === undefined || hostUid === 0
+            ? COMPUTER_UID
+            : hostUid;
+        const effectiveGid =
+          runtimeInfo || hostUid === undefined || hostGid === undefined || hostUid === 0
+            ? COMPUTER_GID
+            : hostGid;
+        await assertComputerHomeWritable(serviceHomePath, effectiveUid, effectiveGid);
+        const name = containerNameFor(body.botId);
+        const createdNetwork =
+          screenNetworkMode === "internal" ? undefined : await ensureBotNetwork(body.botId);
+        let container: Docker.Container | undefined;
+        try {
+          if (existing) {
+            await existing.remove({ force: true }).catch(() => undefined);
+          }
+          container = await docker.createContainer(
+            containerCreateOptions({
+              name,
+              image: COMPUTER_IMAGE,
+              botId: body.botId,
+              spaceId: body.spaceId,
+              ...storage,
+              user: computerUser,
+              networkMode,
+              controlToken: randomUUID(),
+              publishControlPort: controlViaLoopback,
+            }),
+          );
+          await container.start();
+        } catch (error) {
+          // Never force removal: a lost start response may hide a running computer.
+          // Docker also refuses network removal while any endpoint is attached.
+          await container?.remove().catch(() => undefined);
+          await createdNetwork?.remove().catch(() => undefined);
+          throw error;
+        }
+        return c.json({
+          id: container.id,
+          image: COMPUTER_IMAGE,
+          resumed: false,
+        });
+      };
+
+      if (spaceComputerLimit > 0) {
+        return await withSpaceComputerLock(body.spaceId, createComputer);
       }
-      return c.json({
-        id: container.id,
-        image: COMPUTER_IMAGE,
-        resumed: false,
-      });
+      return await createComputer();
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -826,6 +857,7 @@ async function ensureComputerImage() {
             "rakazo-browser.desktop",
             "embed.html",
             "clipboard-bridge.js",
+            "mobile-keyboard.js",
             "fluxbox.init",
             "fluxbox.apps",
             "fluxbox.menu",
@@ -857,6 +889,44 @@ async function findBotContainer(botId: string, spaceId: string) {
     if (isRakazoContainer(info, botId, spaceId)) return container;
   }
   return undefined;
+}
+
+/** Count managed computers for a space, including legacy workspaceId / unlabeled-managed. */
+export async function countSpaceContainers(spaceId: string): Promise<number> {
+  // Do not filter by rakazo.managed=true: legacy computers are still managed via
+  // COMPUTER_IMAGE + rakazo.workspaceId (same rule as isRakazoContainer).
+  const listed = await docker.listContainers({ all: true });
+  let count = 0;
+  for (const item of listed) {
+    if (await isManagedSpaceContainer(item, spaceId)) count++;
+  }
+  return count;
+}
+
+async function isManagedSpaceContainer(
+  item: Docker.ContainerInfo,
+  spaceId: string,
+): Promise<boolean> {
+  const labels = item.Labels;
+  if (labels) {
+    const listedSpaceId = labels["rakazo.spaceId"] ?? labels["rakazo.workspaceId"];
+    // Labeled for another space (or no space identity) cannot count toward this cap.
+    if (listedSpaceId !== spaceId) return false;
+    if (labels["rakazo.managed"] === "true" || item.Image === COMPUTER_IMAGE) return true;
+    // Space matches but Image may be an ID after the tag moved — confirm via inspect.
+  }
+  // Missing list Labels: inspect with the same managed rule as isRakazoContainer.
+  try {
+    const info = await docker.getContainer(item.Id).inspect();
+    const infoLabels = info.Config?.Labels ?? {};
+    const managed =
+      infoLabels["rakazo.managed"] === "true" || info.Config?.Image === COMPUTER_IMAGE;
+    const infoSpaceId = infoLabels["rakazo.spaceId"] ?? infoLabels["rakazo.workspaceId"];
+    return managed && infoSpaceId === spaceId;
+  } catch {
+    // Container might have been removed concurrently
+    return false;
+  }
 }
 
 class ComputerIdentityError extends Error {}
@@ -943,12 +1013,6 @@ function assertBotHomePath(homePath: string, botId: string) {
   if (homePath !== expected) {
     throw new Error("computer home must be the bot's home directory");
   }
-}
-
-function hostHomePath(serviceHomePath: string, info: Docker.ContainerInspectInfo | undefined) {
-  const dataMount = info?.Mounts.find((mount) => mount.Destination === dataDir);
-  if (!dataMount?.Source) return serviceHomePath;
-  return path.join(dataMount.Source, path.relative(dataDir, serviceHomePath));
 }
 
 function computerControlEndpoint(info: Docker.ContainerInspectInfo) {
@@ -1193,6 +1257,7 @@ async function removeBotNetwork(botId: string) {
 
 const botLifecycleLocks = new Map<string, Promise<unknown>>();
 const computerScreenLocks = new Map<string, Promise<unknown>>();
+const spaceComputerLocks = new Map<string, Promise<unknown>>();
 
 // Serialize create/delete for one bot so DELETE cannot remove a per-bot network
 // while POST still needs it between ensureBotNetwork and container attach.
@@ -1204,6 +1269,13 @@ async function withBotLifecycleLock<T>(botId: string, task: () => Promise<T>): P
 // cancel cannot race a replacement claim and kill the newer Chromium session.
 async function withComputerScreenLock<T>(computerId: string, task: () => Promise<T>): Promise<T> {
   return withKeyedLock(computerScreenLocks, computerId, task);
+}
+
+// Serialize per-space create admission (count + create) so different bots cannot
+// race past SANDBOX_MAX_COMPUTERS_PER_SPACE. Callers must already hold the bot
+// lifecycle lock; never acquire a bot lock while holding this lock.
+async function withSpaceComputerLock<T>(spaceId: string, task: () => Promise<T>): Promise<T> {
+  return withKeyedLock(spaceComputerLocks, spaceId, task);
 }
 
 async function inspectSupervisorContainer() {

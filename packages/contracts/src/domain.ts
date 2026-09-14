@@ -68,6 +68,8 @@ export const BotSchema = z.object({
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
   webhookConfigured: z.boolean(),
+  /** Present when created with an idempotency key (e.g. onboarding:first). */
+  spawnKey: z.string().nullable(),
 });
 export type Bot = z.infer<typeof BotSchema>;
 
@@ -247,6 +249,8 @@ export const SpaceSchema = z.object({
   isDefault: z.boolean(),
   /** True when the space has any bot or group, including archived. */
   hasContent: z.boolean(),
+  /** True only when the current member may delete this non-default space. */
+  canDelete: z.boolean().optional(),
   bots: z.array(SpaceBotSchema),
   groups: z.array(SpaceGroupSchema),
   externalConversations: z.array(ExternalConversationSchema),
@@ -280,6 +284,8 @@ export const CreateBotInput = z.object({
   notifyOnFinish: z.boolean().default(true),
   color: z.string().optional(),
   computerMode: ComputerModeSchema.default("team"),
+  /** Idempotency key within a space (unique with spaceId). */
+  spawnKey: z.string().trim().min(1).max(120).optional(),
 });
 export type CreateBotInput = z.infer<typeof CreateBotInput>;
 
@@ -856,6 +862,43 @@ export const ThreadSnapshotSchema = z.object({
 });
 export type ThreadSnapshot = z.infer<typeof ThreadSnapshotSchema>;
 
+/** Default maximum number of completion tokens for an OpenAI-compatible connection. */
+export const DEFAULT_MODEL_MAX_TOKENS = 4_096;
+
+/** Largest completion-token limit exposed by model settings. */
+export const MAX_MODEL_MAX_TOKENS = 131_072;
+
+/** Default context window for an OpenAI-compatible connection. */
+export const DEFAULT_MODEL_CONTEXT_WINDOW = 32_768;
+
+/** Largest context window exposed by model settings. */
+export const MAX_MODEL_CONTEXT_WINDOW = 1_048_576;
+/** Parse the optional per-connection image limit entered in model settings. */
+export function parseModelMaxImagesPerPrompt(
+  value: string,
+  supportsImages = true,
+): number | undefined {
+  if (!supportsImages) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 1000 ? parsed : undefined;
+}
+
+/** Parse the optional completion-token limit entered in model settings. */
+export function parseModelMaxTokens(value: string): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_MODEL_MAX_TOKENS
+    ? parsed
+    : undefined;
+}
+
+/** Parse the optional context-window limit entered in model settings. */
+export function parseModelContextWindow(value: string): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_MODEL_CONTEXT_WINDOW
+    ? parsed
+    : undefined;
+}
+
 export const ModelCredentialSchema = z.object({
   id: Id,
   provider: z.string(),
@@ -865,6 +908,11 @@ export const ModelCredentialSchema = z.object({
   baseUrl: z.string().optional(),
   modelId: z.string().optional(),
   reasoning: z.boolean().optional(),
+  thinkingLevel: ThinkingLevelSchema.nullable().optional(),
+  maxTokens: z.number().int().min(1).max(MAX_MODEL_MAX_TOKENS).optional(),
+  contextWindow: z.number().int().min(1).max(MAX_MODEL_CONTEXT_WINDOW).optional(),
+  supportsImages: z.boolean().optional(),
+  maxImagesPerPrompt: z.number().int().min(1).max(1000).optional(),
   thinkingLevels: z.array(ThinkingLevelSchema).optional(),
 });
 export type ModelCredential = z.infer<typeof ModelCredentialSchema>;
@@ -879,8 +927,24 @@ export const ModelConnectInputSchema = z
     label: z.string().optional(),
     modelId: z.string().optional(),
     reasoning: z.boolean().optional(),
+    thinkingLevel: ThinkingLevelSchema.nullable().optional(),
+    maxTokens: z.number().int().min(1).max(MAX_MODEL_MAX_TOKENS).optional(),
+    contextWindow: z.number().int().min(1).max(MAX_MODEL_CONTEXT_WINDOW).optional(),
+    supportsImages: z.boolean().optional(),
+    maxImagesPerPrompt: z.number().int().min(1).max(1000).nullable().optional(),
   })
   .superRefine((value, ctx) => {
+    if (
+      value.maxTokens !== undefined &&
+      value.contextWindow !== undefined &&
+      value.maxTokens > value.contextWindow
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Maximum output tokens cannot exceed the context limit",
+        path: ["maxTokens"],
+      });
+    }
     if (value.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
       if (!value.baseUrl?.trim()) {
         ctx.addIssue({

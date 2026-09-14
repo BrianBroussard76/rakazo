@@ -33,7 +33,7 @@ msgid "{0} (over 10 MiB)"
 msgstr "{0} (más de 10 MiB)"
 
 #. placeholder {0}: preset.n
-#: src/pages/RoutineSchedule.tsx:81
+#: src/pages/RoutineSchedule.tsx:136
 msgid "{0} {unitLabel}"
 msgstr "{0} {unitLabel}"
 
@@ -141,8 +141,8 @@ msgstr "{workingBotName} está trabajando"
 msgid "@{0}"
 msgstr "@{0}"
 
-#: src/pages/shell/dialogs.tsx:140
-msgid "A separate, private workspace with its own bots and groups. Use spaces to keep contexts apart, such as work and personal."
+#: src/pages/shell/dialogs.tsx:137
+msgid "Private workspace with its own bots and groups."
 msgstr ""
 
 #: src/pages/shell/bot-picker.tsx:105
@@ -185,6 +185,7 @@ msgstr "Confirmaciones de acción"
 
 #. placeholder {0}: bot.name
 #: src/pages/BotContextMenu.tsx:82
+#: src/pages/Shell.tsx:2609
 msgid "Actions for {0}"
 msgstr "Acciones para {0}"
 
@@ -496,13 +497,13 @@ msgid "Ask the server owner to configure this provider."
 msgstr ""
 
 #. placeholder {0}: preset.time
-#: src/pages/RoutineSchedule.tsx:91
-#: src/pages/RoutineSchedule.tsx:94
-#: src/pages/RoutineSchedule.tsx:99
+#: src/pages/RoutineSchedule.tsx:146
+#: src/pages/RoutineSchedule.tsx:149
+#: src/pages/RoutineSchedule.tsx:154
 msgid "at {0}"
 msgstr "a las {0}"
 
-#: src/pages/RoutineSchedule.tsx:197
+#: src/pages/RoutineSchedule.tsx:258
 msgid "at {timeSelect}"
 msgstr "a las {timeSelect}"
 
@@ -528,6 +529,10 @@ msgstr "Se agotó el tiempo de autorización. Inténtalo de nuevo."
 msgid "Authorize"
 msgstr "Autorizar"
 
+#: src/pages/shell/message-cards.tsx:350
+msgid "Authorize this server so agents can use its tools. A popup opens."
+msgstr "Autoriza este servidor para que tus agentes usen sus herramientas. Se abre una ventana emergente."
+
 #: src/pages/ExternalConversationSettings.tsx:160
 msgid "Automated senders"
 msgstr ""
@@ -548,10 +553,6 @@ msgstr "Avatares"
 #: src/pages/RoutineEditor.tsx:260
 msgid "Back"
 msgstr "Atrás"
-
-#: src/pages/Onboarding.tsx:277
-msgid "Back to app"
-msgstr ""
 
 #: src/pages/Auth.tsx:126
 #: src/pages/Auth.tsx:235
@@ -627,7 +628,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/components/AskCard.tsx:35
 #: src/components/AskCard.tsx:186
 #: src/components/ComputerMaintenanceActions.tsx:97
-#: src/components/ComputerUpdateProgress.tsx:236
+#: src/components/ComputerUpdateProgress.tsx:233
 #: src/components/teach/TeachComputerOverlay.tsx:254
 #: src/pages/KnowledgeSection.tsx:212
 #: src/pages/KnowledgeSection.tsx:437
@@ -1419,11 +1420,11 @@ msgstr "Credencial"
 msgid "credential saved"
 msgstr "credencial guardada"
 
-#: src/pages/RoutineSchedule.tsx:88
+#: src/pages/RoutineSchedule.tsx:143
 msgid "Cron"
 msgstr "Cron"
 
-#: src/pages/RoutineSchedule.tsx:202
+#: src/pages/RoutineSchedule.tsx:263
 msgid "Cron expression"
 msgstr "Expresión cron"
 
@@ -1648,27 +1649,27 @@ msgid "Enter this code at <0>{0}</0>"
 msgstr "Ingresa este código en <0>{0}</0>"
 
 #: src/pages/ExternalConversationSettings.tsx:196
-#: src/pages/RoutineSchedule.tsx:80
+#: src/pages/RoutineSchedule.tsx:135
 msgid "Every"
 msgstr "Cada"
 
-#: src/pages/RoutineSchedule.tsx:193
+#: src/pages/RoutineSchedule.tsx:253
 msgid "every {intervalAmountSelect} {intervalUnitSelect}"
 msgstr "cada {intervalAmountSelect} {intervalUnitSelect}"
 
 #: src/pages/RoutineEditor.tsx:633
 #: src/pages/RoutineSchedule.tsx:33
-#: src/pages/RoutineSchedule.tsx:99
+#: src/pages/RoutineSchedule.tsx:154
 msgid "Every day"
 msgstr "Todos los días"
 
 #: src/pages/RoutineEditor.tsx:631
 #: src/pages/RoutineSchedule.tsx:31
-#: src/pages/RoutineSchedule.tsx:85
+#: src/pages/RoutineSchedule.tsx:140
 msgid "Every hour"
 msgstr "Cada hora"
 
-#: src/pages/RoutineSchedule.tsx:94
+#: src/pages/RoutineSchedule.tsx:149
 msgid "Every Monday"
 msgstr "Cada lunes"
 
@@ -1877,7 +1878,7 @@ msgstr "hora"
 msgid "hours"
 msgstr "horas"
 
-#: src/pages/RoutineSchedule.tsx:176
+#: src/pages/RoutineSchedule.tsx:231
 msgid "How often"
 msgstr "Con qué frecuencia"
 
@@ -1939,11 +1940,11 @@ msgstr "Interrumpir"
 msgid "Interval"
 msgstr "Intervalo"
 
-#: src/pages/RoutineSchedule.tsx:122
+#: src/pages/RoutineSchedule.tsx:177
 msgid "Interval amount"
 msgstr "Cantidad del intervalo"
 
-#: src/pages/RoutineSchedule.tsx:137
+#: src/pages/RoutineSchedule.tsx:192
 msgid "Interval unit"
 msgstr "Unidad del intervalo"
 
@@ -2083,6 +2084,10 @@ msgstr "Cerrar sesión"
 msgid "Low"
 msgstr "Bajo"
 
+#: src/components/ComputerUpdateProgress.tsx:228
+msgid "Make sure nothing is still running on this computer."
+msgstr "Asegúrate de que no quede nada en ejecución en este ordenador."
+
 #: src/pages/PluginsOverlay.tsx:1162
 msgid "Manage MCP servers"
 msgstr "Gestionar servidores MCP"
@@ -2150,13 +2155,13 @@ msgstr "Menciones"
 msgid "Mentions only"
 msgstr ""
 
-#: src/pages/Shell.tsx:4912
-#: src/pages/Shell.tsx:5039
+#. js-lingui-explicit-id
+#: src/lib/browser-notifications.ts:83
 msgid "Message"
 msgstr "Mensaje"
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts:83
+#: src/pages/Shell.tsx:4912
+#: src/pages/Shell.tsx:5039
 msgid "Message"
 msgstr "Mensaje"
 
@@ -2262,7 +2267,7 @@ msgstr ""
 msgid "Models from server"
 msgstr "Modelos del servidor"
 
-#: src/pages/RoutineSchedule.tsx:97
+#: src/pages/RoutineSchedule.tsx:152
 msgid "Monthly"
 msgstr "Mensual"
 
@@ -2467,6 +2472,10 @@ msgstr "No está en el catálogo de plugins"
 msgid "Not now"
 msgstr "Ahora no"
 
+#: src/components/ComputerUpdateProgress.tsx:251
+msgid "Nothing is still running"
+msgstr "No queda nada en ejecución"
+
 #: src/pages/KnowledgeSection.tsx:163
 msgid "Nothing remembered yet"
 msgstr "Aún no hay recuerdos"
@@ -2501,12 +2510,12 @@ msgid "On a schedule"
 msgstr "Con un horario"
 
 #. placeholder {0}: preset.time
-#: src/pages/RoutineSchedule.tsx:97
+#: src/pages/RoutineSchedule.tsx:152
 msgid "on the 1st at {0}"
 msgstr "el día 1 a las {0}"
 
 #: src/pages/shell/dialogs.tsx:135
-msgid "One conversation with 2–6 of your bots in a shared thread. Name the group, pick its members, and they all reply in the same chat."
+msgid "Shared chat with 2-6 bots. They all reply in the same thread."
 msgstr ""
 
 #: src/pages/Shell.tsx:3681
@@ -2678,8 +2687,8 @@ msgid "Queued"
 msgstr "En cola"
 
 #: src/pages/PluginsOverlay.tsx:1075
-msgid "Rakazo verifies the source before saving it. Credentials are encrypted and are never returned to clients or exposed to the model."
-msgstr "Rakazo verifica la fuente antes de guardarla. Las credenciales se cifran y nunca se devuelven a los clientes ni se exponen al modelo."
+msgid "Credentials are encrypted and never sent to the model."
+msgstr "Las credenciales se cifran y nunca se envían al modelo."
 
 #: src/pages/shell/bot-panel.tsx:478
 msgid "Read replies aloud"
@@ -3309,10 +3318,6 @@ msgstr "Pasos"
 msgid "Stop"
 msgstr "Detener"
 
-#: src/components/ComputerUpdateProgress.tsx:228
-msgid "Stop all workers and confirm that provider operations have stopped before releasing this computer."
-msgstr ""
-
 #: src/pages/Shell.tsx:5288
 #: src/pages/Shell.tsx:5539
 msgid "Stop speaking"
@@ -3349,6 +3354,11 @@ msgstr "Enviar"
 #: src/pages/Onboarding.tsx:462
 msgid "Supports thinking"
 msgstr "Admite razonamiento"
+
+#: src/pages/ModelSettingsOverlay.tsx:508
+#: src/pages/Onboarding.tsx:425
+msgid "Supports images"
+msgstr "Admite imágenes"
 
 #: src/pages/shell/command-palette.tsx:90
 msgid "Switch bot"
@@ -3462,15 +3472,11 @@ msgstr "Este servidor no solicitó autorización del navegador."
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "Este servidor ya está conectado. Desconéctalo primero para autorizarlo de nuevo."
 
-#: src/pages/shell/message-cards.tsx:350
-msgid "This server uses browser sign-in. Authorize it to let your agents use its tools. A popup will open."
-msgstr "Este servidor usa inicio de sesión en el navegador. Autorízalo para que tus agentes usen sus herramientas: se abrirá una ventana emergente."
-
 #: src/pages/ModelSettingsOverlay.tsx:709
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "Este inicio de sesión por suscripción aún no está disponible en Rakazo. Usa una credencial de despliegue o elige otro proveedor."
 
-#: src/pages/RoutineSchedule.tsx:152
+#: src/pages/RoutineSchedule.tsx:207
 msgid "Time of day"
 msgstr "Hora del día"
 
@@ -3646,7 +3652,7 @@ msgstr "Webhook"
 
 #: src/pages/RoutineEditor.tsx:635
 #: src/pages/RoutineSchedule.tsx:35
-#: src/pages/RoutineSchedule.tsx:91
+#: src/pages/RoutineSchedule.tsx:146
 msgid "Weekdays"
 msgstr "Días laborables"
 
@@ -3688,10 +3694,6 @@ msgstr "Cuándo usar"
 msgid "Where should bots run?"
 msgstr "¿Dónde deben ejecutarse los bots?"
 
-#: src/components/ComputerUpdateProgress.tsx:254
-msgid "Workers and operations are stopped"
-msgstr ""
-
 #: src/pages/Auth.tsx:209
 #: src/pages/Auth.tsx:317
 #: src/pages/CallView.tsx:251
@@ -3726,3 +3728,68 @@ msgstr "Tu nombre"
 #: src/pages/Welcome.tsx:21
 msgid "Your team of always-on agents<0/>that you can give real work to."
 msgstr "Tu equipo de agentes siempre activos<0/>a los que puedes dar trabajo real."
+
+msgid "React"
+msgstr "Reaccionar"
+
+msgid "Reactions"
+msgstr "Reacciones"
+
+msgid "Opening chat…"
+msgstr "Abriendo el chat…"
+
+msgid "Try again"
+msgstr "Intentarlo de nuevo"
+
+#: apps/web/src/pages/memory-providers/SerenitySettingsForm.tsx
+msgid "MCP endpoint"
+msgstr ""
+
+#: apps/web/src/pages/memory-providers/SerenitySettingsForm.tsx
+msgid "Brain label"
+msgstr ""
+
+#: apps/web/src/pages/memory-providers/SerenitySettingsForm.tsx
+msgid "Allow writing"
+msgstr ""
+
+#: apps/web/src/pages/memory-providers/SerenitySettingsForm.tsx
+msgid "Recall only"
+msgstr ""
+
+#: apps/web/src/pages/memory-providers/SerenitySettingsForm.tsx
+msgid "Recall and write"
+msgstr ""
+
+#: src/pages/Onboarding.tsx:516
+msgid "Reasoning effort"
+msgstr "Esfuerzo de razonamiento"
+
+#: src/pages/Onboarding.tsx:517
+msgid "Default"
+msgstr "Predeterminado"
+
+#: src/pages/Onboarding.tsx:520
+msgid "Maximum output tokens"
+msgstr "Máximo de tokens de salida"
+
+#: src/pages/Onboarding.tsx:523
+msgid "Context limit"
+msgstr "Límite de contexto"
+
+#: src/pages/Onboarding.tsx:227
+msgid "Enter a whole number from 1 to {MAX_MODEL_MAX_TOKENS} for maximum output tokens."
+msgstr "Introduce un número entero del 1 al {MAX_MODEL_MAX_TOKENS} para el máximo de tokens de salida."
+
+#: src/pages/Onboarding.tsx:234
+msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
+msgstr "Introduce un número entero del 1 al {MAX_MODEL_CONTEXT_WINDOW} para el límite de contexto."
+
+#: src/pages/Onboarding.tsx:218
+msgid "Enter a whole number from 1 to 1000 for the image limit."
+msgstr "Introduce un número entero del 1 al 1000 para el límite de imágenes."
+
+#: src/pages/Onboarding.tsx:529
+msgid "Maximum images per request"
+msgstr "Máximo de imágenes por solicitud"
+

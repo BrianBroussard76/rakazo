@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { BoxSandboxProvider, E2BSandboxProvider, PiAgentRuntime } from "@rakazo/adapters";
-import type { RunStatus } from "@rakazo/contracts";
+import type { AiConsentStatus, RunStatus } from "@rakazo/contracts";
 import { isTerminal } from "@rakazo/core";
 import { loadRootEnv } from "@rakazo/core/node/load-root-env";
 import { afterAll, describe, expect, it } from "vitest";
@@ -166,6 +166,15 @@ describePiApp("live OpenRouter product journey", () => {
       description: "Canary",
       instructions: "Reply briefly. Prefer the write_file tool when asked to write a file.",
       notifyOnFinish: true,
+    });
+    const consent = await rpc<AiConsentStatus>(handles.app, cookie, "aiConsent/status", {
+      botId: botRes.id,
+      uses: ["model", "memory"],
+    });
+    await rpc(handles.app, cookie, "aiConsent/allow", {
+      scope: consent.scope,
+      version: consent.version,
+      keys: consent.recipients.map((recipient) => recipient.key),
     });
     const sent = await rpc<{ runId: string }>(handles.app, cookie, "threads/send", {
       botId: botRes.id,

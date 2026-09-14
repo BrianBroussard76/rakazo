@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   Agent,
   type AgentMessage,
@@ -28,6 +29,10 @@ import { getLogger } from "@rakazo/logging";
 import { isToolPauseResult } from "./approval-effect.js";
 import { builtinAgentTools, DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
+import {
+  normalizeOpenAiToolParameters,
+  openAiToolParametersNeedNormalization,
+} from "./openai-tool-parameters.js";
 import { PiRuntimeCredentialStore, toOAuthCredential } from "./pi-credentials.js";
 import { registerLocalProvider } from "./pi-local-provider.js";
 import {
@@ -60,6 +65,7 @@ const SILENT_TOOL_CONTINUATION_PROMPT =
   "Continue the original task from the latest tool result. Do not stop after a tool call; use any remaining tools needed, then give the user the final answer.";
 const TOOL_FINAL_RESPONSE_FALLBACK =
   "I completed the tool step but could not produce a final response. Please ask me to continue.";
+const DEFAULT_COMPUTER_SCREENSHOTS_TO_KEEP = 2;
 // Reasoning-capable models must not start at "off": for OpenRouter, pi-ai maps
 // that to reasoning.effort "none", which 400s on endpoints that mandate
 // reasoning (e.g. google/gemini-3.7-flash). Keep a real level when model.reasoning
@@ -233,7 +239,7 @@ export class PiAgentRuntime implements AgentRuntime {
 
         let agent: Agent;
         agent = new Agent({
-          sessionId: `${request.threadId}:${request.botId}`,
+          sessionId: conversationSessionId(request.threadId, request.botId),
           steeringMode: "all",
           streamFn: (m, ctx, options) =>
             models.streamSimple(m, ctx, {
@@ -244,7 +250,8 @@ export class PiAgentRuntime implements AgentRuntime {
               }),
             }),
           getApiKey: async () => apiKey,
-          transformContext: async (messages) => pruneComputerScreenshotContext(messages),
+          transformContext: async (messages) =>
+            pruneComputerScreenshotContext(messages, request.model.maxImagesPerPrompt),
           prepareNextTurnWithContext: async () => {
             if (!request.claimSteering) return undefined;
             const steering = await request.claimSteering([...seenSteeringIds]);
@@ -386,7 +393,7 @@ export class PiAgentRuntime implements AgentRuntime {
         const budgetExceeded = host.toolCallBudget.exceeded;
         const error = agent.state.errorMessage;
         if (error && !budgetExceeded) {
-          throw new Error(sanitizeError(error));
+          throw new Error(sanitizeProviderError(model.provider, error));
         }
         if (budgetExceeded) {
           const budgetMessage = toolCallBudgetExceededMessage(host.toolCallBudget.limit);
@@ -534,6 +541,9 @@ export function modelsForRequest(
       modelId: request.model.id,
       baseUrl: request.model.baseUrl,
       reasoning: request.model.reasoning,
+      acceptsImages: request.model.acceptsImages,
+      maxTokens: request.model.maxTokens,
+      contextWindow: request.model.contextWindow,
     });
   }
   return catalogModels();
@@ -705,6 +715,25 @@ function withoutSteeringMessages(
   return result;
 }
 
+/**
+ * Normalize `request_secret` arguments.
+ *
+ * `credential` and `replace` must survive: the executor stores a submitted value
+ * only when `credential` is present, and it validates the destination shape
+ * itself. An earlier version of this function listed only label/purpose/
+ * connectionId, so every credential the model supplied was dropped here and the
+ * saved value had nowhere to go.
+ */
+export function prepareRequestSecretArguments(raw: Record<string, unknown>) {
+  return {
+    label: String(raw.label ?? "Code"),
+    purpose: String(raw.purpose ?? "otp"),
+    ...(raw.connectionId ? { connectionId: String(raw.connectionId) } : {}),
+    ...(raw.credential ? { credential: raw.credential } : {}),
+    ...(raw.replace === true ? { replace: true } : {}),
+  };
+}
+
 function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): AgentTool {
   return {
     name: exposedName,
@@ -736,11 +765,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
         };
       }
       if (tool.name === "request_secret") {
-        return {
-          label: String(raw.label ?? "Code"),
-          purpose: String(raw.purpose ?? "otp"),
-          ...(raw.connectionId ? { connectionId: String(raw.connectionId) } : {}),
-        };
+        return prepareRequestSecretArguments(raw);
       }
       if (tool.name === "write_file") {
         return {
@@ -768,7 +793,8 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
       if (tool.name === "shell") {
         return {
           command: String(raw.command ?? ""),
-          cwd: raw.cwd ? String(raw.cwd) : "/home/rakazo",
+          // The executor chooses the bot-scoped default, including Team workspaces.
+          ...(raw.cwd ? { cwd: String(raw.cwd) } : {}),
         };
       }
       if (tool.name === "run_subagent") {
@@ -976,6 +1002,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     depth: 1,
   };
   const nested = new Agent({
+    sessionId: conversationSessionId(host.request.threadId, host.request.botId, agentId),
     streamFn: (m, ctx, options) =>
       selectedModel.models.streamSimple(m, ctx, {
         ...reliableStreamOptions(m, options),
@@ -985,7 +1012,8 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         }),
       }),
     getApiKey: async () => selectedModel.apiKey,
-    transformContext: async (messages) => pruneComputerScreenshotContext(messages),
+    transformContext: async (messages) =>
+      pruneComputerScreenshotContext(messages, requestModel.maxImagesPerPrompt),
     initialState: {
       systemPrompt: [
         `You are a Rakazo subagent named "${name}".`,
@@ -1079,7 +1107,7 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     const budgetExceeded = host.toolCallBudget.exceeded;
     const error = nested.state.errorMessage;
     if (error && !budgetExceeded) {
-      const message = sanitizeError(error);
+      const message = sanitizeProviderError(subagentModel.provider, error);
       host.queue.push({ type: "subagent", agentId, name, task, status: "failed", result: message });
       return `Subagent failed: ${message}`;
     }
@@ -1110,8 +1138,15 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   }
 }
 
-function parametersFor(tool: ConnectorTool) {
-  return builtinParameters(tool) ?? safeJsonSchemaParameters(tool);
+/** Build AgentTool.parameters for a connector tool, including OpenAI wire fidelity. */
+export function parametersFor(tool: ConnectorTool) {
+  const schema = builtinParameters(tool) ?? safeJsonSchemaParameters(tool);
+  // Type.Union (top-level oneOf/anyOf) serializes without type/properties.
+  // Re-wrap only when needed so Type.Object schemas keep TypeBox Kind metadata.
+  if (!openAiToolParametersNeedNormalization(schema)) return schema;
+  return Type.Unsafe(
+    normalizeOpenAiToolParameters(JSON.parse(JSON.stringify(schema))),
+  ) as unknown as ReturnType<typeof Type.Object>;
 }
 
 /** A remote MCP server controls its own schemas, so a shape TypeBox cannot express must
@@ -1138,13 +1173,6 @@ function builtinParameters(tool: ConnectorTool) {
   }
   if (tool.name === "request_takeover") {
     return Type.Object({ reason: Type.String() });
-  }
-  if (tool.name === "request_secret") {
-    return Type.Object({
-      label: Type.String(),
-      purpose: Type.Union([Type.Literal("otp"), Type.Literal("password"), Type.Literal("api_key")]),
-      connectionId: Type.Optional(Type.String()),
-    });
   }
   if (tool.name === "ask_user") {
     return Type.Object({
@@ -1195,18 +1223,38 @@ function builtinParameters(tool: ConnectorTool) {
   return undefined;
 }
 
-/** Keep recent visual state without repeatedly resending every earlier full screenshot. */
+/** Keep recent visual state while respecting an optional model image budget. */
 export function pruneComputerScreenshotContext(
   messages: AgentMessage[],
-  screenshotsToKeep = 2,
+  maxImagesPerPrompt?: number,
 ): AgentMessage[] {
-  let remaining = Math.max(0, screenshotsToKeep);
+  const imageLimit =
+    maxImagesPerPrompt === undefined
+      ? undefined
+      : Number.isFinite(maxImagesPerPrompt)
+        ? Math.max(0, Math.floor(maxImagesPerPrompt))
+        : DEFAULT_COMPUTER_SCREENSHOTS_TO_KEEP;
+  let remaining = imageLimit ?? DEFAULT_COMPUTER_SCREENSHOTS_TO_KEEP;
+  if (imageLimit !== undefined) {
+    const nonScreenshotImages = messages.reduce(
+      (count, message) =>
+        isComputerScreenshotMessage(message) ? count : count + imagePartCount(message),
+      0,
+    );
+    if (nonScreenshotImages > imageLimit) {
+      throw new Error(
+        `The configured model image limit is ${imageLimit}, but the prompt contains ${nonScreenshotImages} non-screenshot images.`,
+      );
+    }
+    remaining = imageLimit - nonScreenshotImages;
+  }
   let transformed: AgentMessage[] | undefined;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!isComputerScreenshotMessage(message)) continue;
-    if (remaining > 0) {
-      remaining -= 1;
+    const images = imagePartCount(message);
+    if (remaining >= images) {
+      remaining -= images;
       continue;
     }
     transformed ??= [...messages];
@@ -1216,6 +1264,14 @@ export function pruneComputerScreenshotContext(
     };
   }
   return transformed ?? messages;
+}
+
+function imagePartCount(message: AgentMessage): number {
+  if (!("content" in message) || !Array.isArray(message.content)) return 0;
+  return message.content.filter(
+    (part: unknown) =>
+      part !== null && typeof part === "object" && "type" in part && part.type === "image",
+  ).length;
 }
 
 function isComputerScreenshotMessage(
@@ -1255,7 +1311,22 @@ function isAgentToolExecutionResult(result: unknown): result is AgentToolExecuti
   );
 }
 
-export function jsonSchemaParameters(schema: Record<string, unknown>) {
+export function jsonSchemaParameters(
+  schema: Record<string, unknown>,
+): ReturnType<typeof Type.Object> {
+  // Top-level oneOf/anyOf (e.g. request_secret's credential XOR connectionId)
+  // must stay a union. Falling through to properties would drop the exclusivity
+  // and re-expose both destinations as optional siblings.
+  const alternatives = Array.isArray(schema.oneOf)
+    ? schema.oneOf
+    : Array.isArray(schema.anyOf)
+      ? schema.anyOf
+      : undefined;
+  if (alternatives && alternatives.length > 0 && schema.properties == null) {
+    return Type.Union(
+      alternatives.map((variant) => jsonSchemaParameters(variant as Record<string, unknown>)),
+    ) as unknown as ReturnType<typeof Type.Object>;
+  }
   const properties = (schema.properties ?? {}) as Record<string, unknown>;
   const required = new Set(Array.isArray(schema.required) ? schema.required.map(String) : []);
   const fields: Record<string, ReturnType<typeof Type.Optional>> = {};
@@ -1265,7 +1336,12 @@ export function jsonSchemaParameters(schema: Record<string, unknown>) {
       typeof Type.Optional
     >;
   }
-  return Type.Object(fields);
+  // Preserve closed objects (e.g. request_secret destination oneOf branches).
+  // Type.Object defaults to open, which would let connectionId+replace match both
+  // anyOf variants after conversion.
+  return schema.additionalProperties === false
+    ? Type.Object(fields, { additionalProperties: false })
+    : Type.Object(fields);
 }
 
 /** TypeBox only builds literals from primitives; anything else throws while the tool list is
@@ -1281,13 +1357,35 @@ function enumUnion(values: readonly unknown[]) {
   return members.every((member) => member !== undefined) ? Type.Union(members) : undefined;
 }
 
-function jsonField(spec: unknown): ReturnType<typeof Type.String> {
+export function jsonField(spec: unknown): ReturnType<typeof Type.String> {
   const definition = spec && typeof spec === "object" ? (spec as Record<string, unknown>) : {};
   if (Array.isArray(definition.enum) && definition.enum.length > 0) {
     const union = enumUnion(definition.enum);
     if (union) return union as never;
   }
+  // A `const` names the only accepted value. Without this it degraded to a bare
+  // string, so a discriminator like {type: {const: "bearer"}} told the model
+  // nothing about which value to send -- and it guessed, twice.
+  if ("const" in definition) {
+    const literal = enumUnion([definition.const]);
+    if (literal) return literal as never;
+  }
+  // A discriminated union arrives as oneOf/anyOf with no sibling `type`. Without
+  // this branch it fell through to the string default, so a model was told to
+  // send an object-valued field as a bare string -- which is exactly what it did.
+  const variants = Array.isArray(definition.oneOf)
+    ? definition.oneOf
+    : Array.isArray(definition.anyOf)
+      ? definition.anyOf
+      : undefined;
+  if (variants && variants.length > 0) {
+    return Type.Union(variants.map((variant) => jsonField(variant))) as never;
+  }
+  if (Array.isArray(definition.type) && definition.type.length > 0) {
+    return Type.Union(definition.type.map((type) => jsonField({ ...definition, type }))) as never;
+  }
   const type = "type" in definition ? String(definition.type) : "string";
+  if (type === "null") return Type.Null() as never;
   if (type === "number" || type === "integer") return Type.Number() as never;
   if (type === "boolean") return Type.Boolean() as never;
   if (type === "array") {
@@ -1362,6 +1460,33 @@ function redactActivityUrl(value: unknown): string {
 
 function sanitizeError(message: string) {
   return sanitizeSensitiveText(message);
+}
+
+/** Stable OpenCode affinity id for a bot conversation (and optional nested agent). */
+export function conversationSessionId(threadId: string, botId: string, agentId?: string): string {
+  return agentId ? `${threadId}:${botId}:${agentId}` : `${threadId}:${botId}`;
+}
+
+export function isOpenCodeProvider(provider: string): boolean {
+  return provider === "opencode" || provider === "opencode-go";
+}
+
+const OPENCODE_SESSION_ERROR = "OpenCode rejected this chat session. Send the message again.";
+
+function looksLikeOpenCodeSessionError(message: string): boolean {
+  return (
+    /x-opencode-session/i.test(message) ||
+    /session\s*(id|header|required|missing|invalid|expired|stale)/i.test(message) ||
+    /model is unavailable/i.test(message)
+  );
+}
+
+function sanitizeProviderError(provider: string, message: string): string {
+  const sanitized = sanitizeError(message);
+  if (isOpenCodeProvider(provider) && looksLikeOpenCodeSessionError(sanitized)) {
+    return OPENCODE_SESSION_ERROR;
+  }
+  return sanitized;
 }
 
 interface EventQueue {
@@ -1467,11 +1592,29 @@ export function reliableStreamOptions(
   model: Pick<Model<Api>, "api" | "provider">,
   options?: SimpleStreamOptions,
 ): SimpleStreamOptions | undefined {
-  if (model.provider !== "openai-codex" && model.api !== "openai-codex-responses") {
-    return options;
+  let next = options;
+
+  if (model.provider === "openai-codex" || model.api === "openai-codex-responses") {
+    // Pi cannot fall back after a WebSocket has emitted its start event. Long tool
+    // runs then surface abnormal close 1006 as a terminal model error. SSE has
+    // bounded network retries and no long-lived connection between tool turns.
+    next = { ...next, transport: "sse" };
   }
-  // Pi cannot fall back after a WebSocket has emitted its start event. Long tool
-  // runs then surface abnormal close 1006 as a terminal model error. SSE has
-  // bounded network retries and no long-lived connection between tool turns.
-  return { ...options, transport: "sse" };
+
+  // OpenCode Go/Zen require a sticky x-opencode-session header (affinity + some
+  // models 400 without it). Pi 0.85.1 does not attach that header on its own.
+  if (isOpenCodeProvider(model.provider)) {
+    const sessionId = next?.sessionId?.trim() || randomUUID();
+    next = {
+      ...next,
+      sessionId,
+      headers: {
+        "x-opencode-session": sessionId,
+        "x-opencode-client": "rakazo",
+        ...next?.headers,
+      },
+    };
+  }
+
+  return next;
 }

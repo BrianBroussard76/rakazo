@@ -230,19 +230,35 @@ export const builtinAgentTools: ConnectorTool[] = [
     name: "request_secret",
     description:
       "Collect a credential in a masked field. Supply credential to save a named API credential for this bot and user at one HTTPS origin, or connectionId for a one-use connector code. Existing named credentials are reused unless replace is true. For website logins, CAPTCHA, passkeys, or anything that needs the live desktop, call request_takeover instead.",
+    // Exactly one destination: credential XOR connectionId. Sibling optionals
+    // looked schema-valid to models but the executor rejects both and neither.
     inputSchema: {
-      type: "object",
-      properties: {
-        label: { type: "string" },
-        purpose: { type: "string", enum: SecretAskPurpose.options },
-        connectionId: { type: "string" },
-        credential: z.toJSONSchema(BotSecretDestination),
-        replace: {
-          type: "boolean",
-          description: "Ask the user to replace an existing credential value.",
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            purpose: { type: "string", enum: SecretAskPurpose.options },
+            credential: z.toJSONSchema(BotSecretDestination),
+            replace: {
+              type: "boolean",
+              description: "Ask the user to replace an existing credential value.",
+            },
+          },
+          required: ["label", "purpose", "credential"],
+          additionalProperties: false,
         },
-      },
-      required: ["label", "purpose"],
+        {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            purpose: { type: "string", enum: SecretAskPurpose.options },
+            connectionId: { type: "string" },
+          },
+          required: ["label", "purpose", "connectionId"],
+          additionalProperties: false,
+        },
+      ],
     },
   },
   {
@@ -487,6 +503,24 @@ export const builtinAgentTools: ConnectorTool[] = [
         query: { type: "string" },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "forget_memory",
+    description:
+      "Forget a durable semantic memory by id (from recall citations). Providers without forget support return an error.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Memory id from a prior recall citation." },
+        entity: {
+          type: "string",
+          description:
+            "Optional entity/namespace from the recall citation when the provider scopes deletes.",
+        },
+        reason: { type: "string", description: "Optional reason recorded with the forget." },
+      },
+      required: ["id"],
     },
   },
   {
@@ -741,6 +775,28 @@ export const builtinAgentTools: ConnectorTool[] = [
         },
       },
       required: ["name"],
+    },
+  },
+  {
+    name: "update_bot",
+    description:
+      "Update this bot's own profile fields that the user sees in chat: name (header and list label), title (short role line), and description. Call this when the user asks you to rename yourself or change your title/description. Do not claim you updated the profile without calling this tool.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Display name shown in the chat header and bot list.",
+        },
+        title: {
+          type: "string",
+          description: "Short role or headline shown in bot settings.",
+        },
+        description: {
+          type: "string",
+          description: "Longer blurb describing what this bot does.",
+        },
+      },
     },
   },
   {
