@@ -10,7 +10,10 @@ export type DictationSnapshot = {
   error?: string;
 };
 
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+type SpeechRecognitionCtor = {
+  new (): SpeechRecognitionLike;
+  available?(options: { langs: string[]; processLocally: boolean }): Promise<string>;
+};
 
 interface SpeechRecognitionLike {
   processLocally?: boolean;
@@ -129,7 +132,15 @@ export class Dictation {
     const spaceId = selectedSpaceId();
     this.onFinal = opts.onFinal;
     this.set({ status: "listening", transcript: "" });
-    if (webSpeechAvailable()) {
+    const Ctor = speechRecognitionCtor();
+    const localReady =
+      !opts.transcribe && webSpeechAvailable() && Ctor?.available
+        ? await Ctor.available({ langs: [navigator.language || "en-US"], processLocally: true })
+            .then((state) => state === "available")
+            .catch(() => false)
+        : false;
+    if (this.token !== mine) return;
+    if (localReady) {
       this.listenWebSpeech(opts.mode, opts.endpointMs ?? 850, mine);
       return;
     }

@@ -159,6 +159,19 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
     };
   }
 
+  it("requires new permission after membership is removed and restored", async () => {
+    const h = await setup();
+    const where = { spaceId_userId: { spaceId: h.id, userId: h.id } };
+    const membership = await prisma.spaceMember.findUniqueOrThrow({ where });
+    await prisma.spaceMember.delete({ where });
+    expect(await prisma.aiDataConsent.count({ where: { userId: h.id } })).toBe(0);
+    await prisma.spaceMember.create({ data: membership });
+    const id = await h.launch();
+    await h.poll(id);
+    expect(await h.state(id)).toMatchObject({ status: "failed", nextPollAt: null });
+    expect(h.wire.requests).toHaveLength(0);
+  });
+
   it("stops a launch without permission before dispatch", async () => {
     const h = await setup();
     await prisma.aiDataConsent.deleteMany({ where: { userId: h.id } });

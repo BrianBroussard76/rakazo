@@ -15,7 +15,7 @@ import {
   runJobKey,
   type SandboxProvider,
 } from "@rakazo/adapter-kit";
-import type { IntegrationProviderSettings } from "@rakazo/adapters";
+import type { CloudAgentConnection, IntegrationProviderSettings } from "@rakazo/adapters";
 import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
@@ -414,7 +414,7 @@ function mcpAssignmentDto(row: {
 }
 
 export interface RouterDeps {
-  cloudAgent?: import("@rakazo/adapters").CloudAgentConnection | null;
+  cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
   events: ThreadEvents;
   auth: Auth;

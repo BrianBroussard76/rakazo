@@ -15,6 +15,7 @@ model AiDataConsent {
   grantedAt DateTime @default(now())
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  spaceMember SpaceMember @relation(fields: [spaceId, userId], references: [spaceId, userId], onDelete: Cascade)
 
   @@id([userId, spaceId, recipientKey])
   @@map("ai_data_consents")
@@ -223,6 +224,7 @@ model SpaceMember {
   createdAt        DateTime
   modelPreferences SpaceModelPreference[]
   voicePreferences SpaceVoicePreference[]
+  aiDataConsents AiDataConsent[]
 
   @@unique([spaceId, userId])
   @@index([organizationId, userId])

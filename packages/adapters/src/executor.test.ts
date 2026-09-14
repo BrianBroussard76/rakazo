@@ -1156,6 +1156,8 @@ description: Prepare standup notes
       { userId: "user-1", spaceId: "ws-1" },
       "xai",
       "grok-4.6",
+      undefined,
+      true,
     );
 
     expect(model).toMatchObject({ provider: "xai", id: "grok-4.6", thinkingLevel: null });
@@ -1169,6 +1171,16 @@ description: Prepare standup notes
         }),
       }),
     );
+    preference.modelId = "different-saved-model";
+    await expect(
+      executor.resolveConnectedModel(
+        { userId: "user-1", spaceId: "ws-1" },
+        "xai",
+        "grok-4.6",
+        undefined,
+        true,
+      ),
+    ).rejects.toThrow("saved in Models settings");
   });
 
   it("rejects a free-form selection when the owning preference disappears", async () => {

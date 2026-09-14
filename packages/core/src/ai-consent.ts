@@ -11,6 +11,7 @@ export function aiDataUsesForProcedure(procedure: string): AiDataUse[] {
   if (
     [
       "threads/send",
+      "artifacts/create",
       "threads/followUp",
       "threads/react",
       "threads/answer",

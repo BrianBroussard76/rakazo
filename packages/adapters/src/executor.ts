@@ -731,6 +731,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
     provider: string,
     modelId: string,
     registerSecrets?: (values: string[]) => void,
+    savedModelOnly = false,
   ): Promise<AgentRunRequest["model"]> => {
     const validationError = await validateConnectedModelChoice(
       deps.prisma,
@@ -741,6 +742,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
     if (validationError) throw new Error(validationError);
     const credential = await findModelCredential(deps.prisma, scope, provider, modelId);
     if (!credential) throw new Error("Connect that model provider first");
+    if (savedModelOnly && credential.defaultModel !== modelId) {
+      throw new Error("Choose a model saved in Models settings for helper calls.");
+    }
     // Free-form selections must keep the preference that owns this modelId. A
     // intervening delete/change can make findModelCredential fall back to another
     // same-provider credential; reject that mismatch instead of mixing baseUrl.
@@ -3430,7 +3434,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 "create_space proposes a new privacy boundary inside the current organization. Use it when the user asks to create a space or separate data between teams or projects. It always pauses for explicit user approval; never claim the space exists before the tool succeeds.",
                 "spawn_bot creates a lasting regular bot (own chat, computer, memory) that appears in the user's bot list. If the user asked to create a bot, call spawn_bot once and stop. Do not run_subagent to demo it.",
                 "update_bot updates this bot's own name (chat header / list label), title, and description. When the user asks you to rename yourself or change your title or description, call update_bot — do not claim you changed them without the tool.",
-                "run_subagent is a short helper inside this turn only. It is not a bot, has no thread, and does not show in the list. Use it for parallel work you will summarize here.",
+                "Explicit helper models must be saved in Models settings; omit model selection to inherit the parent model. run_subagent is a short helper inside this turn only. It is not a bot, has no thread, and does not show in the list. Use it for parallel work you will summarize here.",
                 botDirectory,
                 "archive_bot safely archives a bot this bot created, and only that bot. Use it when the user asks to remove that bot or when it is finished and unused. The user can restore it or permanently delete it later. confirm_name must exactly match its name.",
                 pluginLine,
@@ -3470,8 +3474,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
               resolveModel: scripted
                 ? undefined
                 : (provider, modelId) =>
-                    resolveConnectedModel(run, provider, modelId, (values) =>
-                      runSecrets.push(...values),
+                    resolveConnectedModel(
+                      run,
+                      provider,
+                      modelId,
+                      (values) => runSecrets.push(...values),
+                      true,
                     ),
               onToolCompleted: (completion) =>
                 appendToolCompletionAudit(
