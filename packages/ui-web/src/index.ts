@@ -1,6 +1,7 @@
 export { type AvatarStyle, AvatarStyleProvider, useAvatarStyle } from "./avatar-style.js";
 export {
   BotAvatar,
+  DEFAULT_GROK_BOT_COLOR,
   GROK_BOT_COLORS,
   GROK_MASCOT_SHAPES,
   GrokShapePreview,

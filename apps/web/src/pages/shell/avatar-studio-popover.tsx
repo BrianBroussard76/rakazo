@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import {
   BotAvatar,
+  DEFAULT_GROK_BOT_COLOR,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -38,7 +39,7 @@ export function AvatarStudioPopover({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parsed = parseBotAvatar(value, identity);
-  const currentColor = parsed.color || "#8B5CF6";
+  const currentColor = parsed.color || DEFAULT_GROK_BOT_COLOR;
   const currentShape = parsed.shapeIndex ?? 0;
 
   function selectShape(shapeIndex: number) {
@@ -50,7 +51,7 @@ export function AvatarStudioPopover({
   }
 
   function resetAvatar() {
-    onChange("#8B5CF6::shape_0");
+    onChange(`${DEFAULT_GROK_BOT_COLOR}::shape_0`);
   }
 
   function processImageFile(file: File) {

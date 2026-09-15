@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
   BotAvatar,
+  DEFAULT_GROK_BOT_COLOR,
   GROK_BOT_COLORS,
   GrokShapePreview,
   parseBotAvatar,
@@ -56,10 +57,15 @@ describe("BotAvatar", () => {
   });
 
   it("parses shape indexes from encoded color values", () => {
-    const parsed = parseBotAvatar("#8B5CF6::shape_3");
-    expect(parsed.color).toBe("#8B5CF6");
+    const parsed = parseBotAvatar(`${DEFAULT_GROK_BOT_COLOR}::shape_3`);
+    expect(parsed.color).toBe(DEFAULT_GROK_BOT_COLOR);
     expect(parsed.shapeIndex).toBe(3);
     expect(parsed.isImage).toBe(false);
+  });
+
+  it("exposes the violet identity color as the shared default", () => {
+    expect(GROK_BOT_COLORS).toContain(DEFAULT_GROK_BOT_COLOR);
+    expect(parseBotAvatar(`${DEFAULT_GROK_BOT_COLOR}::shape_0`).color).toBe(DEFAULT_GROK_BOT_COLOR);
   });
 
   it("resolves explicit colors and shapes", () => {

@@ -136,6 +136,9 @@ export const GROK_COLOR_LIST: GrokColorDef[] = [
 
 export const GROK_BOT_COLORS = GROK_COLOR_LIST.map((c) => c.hex);
 
+/** Shared identity color for Avatar Studio reset/fallback (Executive Violet). */
+export const DEFAULT_GROK_BOT_COLOR = GROK_COLOR_LIST.find((color) => color.id === "violet")!.hex;
+
 export const GROK_MASCOT_SHAPES = SHIPPED_SHAPE_KEYS.map(
   (k) => GROK_SHAPES[k] ?? FALLBACK_SHAPE_PATH,
 );
