@@ -3,6 +3,7 @@ import { isIP, type LookupFunction } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { ConnectorTool } from "@rakazo/adapter-kit";
+import { isLocalMcpHost } from "@rakazo/contracts";
 import { Agent } from "undici";
 import { combineSignals } from "./connector-safety.js";
 import {
@@ -21,6 +22,11 @@ const MCP_TIMEOUT_MS = 30_000;
 const MAX_RESULT_BYTES = 1_000_000;
 
 export type { ResolveHostname } from "./network-address.js";
+
+export interface RemoteUrlPolicy {
+  /** Deployment-owner escape for LAN / Docker-network MCP endpoints. Default off. */
+  allowPrivateEndpoint?: boolean;
+}
 
 export interface RemoteTransportDependencies {
   fetch?: typeof globalThis.fetch;
@@ -119,6 +125,7 @@ async function withRemoteMcpClient<T>(
 export async function assertSafeRemoteUrl(
   value: string,
   resolve: ResolveHostname = resolveHostname,
+  policy: RemoteUrlPolicy = {},
 ): Promise<URL> {
   let url: URL;
   try {
@@ -126,25 +133,42 @@ export async function assertSafeRemoteUrl(
   } catch {
     throw new Error("Connector URL is invalid");
   }
-  if (url.protocol !== "https:") throw new Error("Connector URL must use HTTPS");
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Connector URL must use HTTPS");
+  }
   if (url.username || url.password) throw new Error("Connector URL must not contain credentials");
   if (url.hash) throw new Error("Connector URL must not contain a fragment");
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
-  if (isPrivateHostname(hostname)) throw new Error("Connector URL targets a private host");
-  assertPublicAddresses(await resolve(hostname), hostname);
+  if (isBlockedRemoteHostname(hostname)) throw new Error("Connector URL targets a private host");
+  const allowPrivate = policy.allowPrivateEndpoint === true;
+  const loopbackHttp = url.protocol === "http:" && isLocalMcpHost(hostname);
+  const privateHost = isPrivateRemoteMcpHostname(hostname);
+  if (url.protocol === "http:" && !loopbackHttp && !allowPrivate) {
+    throw new Error("Connector URL must use HTTPS");
+  }
+  if (privateHost && !allowPrivate && !loopbackHttp) {
+    throw new Error("Connector URL targets a private host");
+  }
+  if (privateHost || loopbackHttp) return url;
+  const addresses = await resolve(hostname);
+  assertAllowedAddresses(addresses, hostname, policy);
+  if (url.protocol === "http:" && addresses.some((entry) => !isPrivateAddress(entry.address))) {
+    throw new Error("Connector URL must use HTTPS");
+  }
   return url;
 }
 
 export function createSafeRemoteFetch(
   baseFetch: typeof globalThis.fetch = dispatcherFetch,
   resolve: ResolveHostname = resolveHostname,
+  policy: RemoteUrlPolicy = {},
 ): SafeRemoteFetch {
-  const dispatcher = new Agent({ connect: { lookup: createSafeLookup(resolve) } });
+  const dispatcher = new Agent({ connect: { lookup: createSafeLookup(resolve, policy) } });
   const safeFetch = async (input: string | URL | Request, init?: RequestInit) => {
     if (typeof input !== "string" && !(input instanceof URL)) {
       throw new Error("Connector fetch requires a URL, not a Request");
     }
-    const url = await assertSafeRemoteUrl(String(input), resolve);
+    const url = await assertSafeRemoteUrl(String(input), resolve, policy);
     let response: Response;
     try {
       response = await baseFetch(url, {
@@ -187,8 +211,13 @@ function transportFailureDetail(error: unknown, depth = 0): string | undefined {
   );
 }
 
-export function createSafeLookup(resolve: ResolveHostname = resolveHostname): LookupFunction {
-  return createAddressCheckedLookup(resolve, assertPublicAddresses);
+export function createSafeLookup(
+  resolve: ResolveHostname = resolveHostname,
+  policy: RemoteUrlPolicy = {},
+): LookupFunction {
+  return createAddressCheckedLookup(resolve, (addresses, hostname) =>
+    assertAllowedAddresses(addresses, hostname, policy),
+  );
 }
 
 /** Tailscale MagicDNS names (*.ts.net) are public DNS names, not private IP literals. */
@@ -197,17 +226,57 @@ function isTailscaleMagicDnsHostname(hostname: string): boolean {
   return normalized === "ts.net" || normalized.endsWith(".ts.net");
 }
 
-function isPrivateHostname(hostname: string): boolean {
+function isBlockedRemoteHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  return (
+    normalized === "metadata.google.internal" ||
+    normalized === "metadata.goog" ||
+    (isIP(normalized) !== 0 && isCloudMetadataAddress(normalized))
+  );
+}
+
+/** Loopback, RFC1918/ULA literals, Docker Desktop, and typical LAN DNS suffixes. */
+export function isPrivateRemoteMcpHostname(hostname: string): boolean {
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "")
+    .replace(/\.$/, "");
   if (isTailscaleMagicDnsHostname(normalized)) return false;
   return (
     normalized === "localhost" ||
+    normalized === "host.docker.internal" ||
     normalized.endsWith(".localhost") ||
     normalized.endsWith(".local") ||
     normalized.endsWith(".internal") ||
     normalized === "metadata.google.internal" ||
     (isIP(normalized) !== 0 && isPrivateAddress(normalized))
   );
+}
+
+function assertAllowedAddresses(
+  addresses: ResolvedAddress[],
+  hostname: string | undefined,
+  policy: RemoteUrlPolicy,
+): void {
+  if (policy.allowPrivateEndpoint === true) {
+    assertUnmixedAddresses(addresses);
+    return;
+  }
+  assertPublicAddresses(addresses, hostname);
+}
+
+function assertUnmixedAddresses(addresses: ResolvedAddress[]): void {
+  if (addresses.length === 0) {
+    throw new Error("Connector URL resolves to a private address");
+  }
+  if (addresses.some((entry) => isCloudMetadataAddress(entry.address))) {
+    throw new Error("Connector URL resolves to a private address");
+  }
+  const hasPrivate = addresses.some((entry) => isPrivateAddress(entry.address));
+  const hasPublic = addresses.some((entry) => !isPrivateAddress(entry.address));
+  if (hasPrivate && hasPublic) {
+    throw new Error("Connector URL resolves to a private address");
+  }
 }
 
 function assertPublicAddresses(addresses: ResolvedAddress[], hostname?: string): void {
