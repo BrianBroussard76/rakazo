@@ -149,7 +149,8 @@ export async function assertSafeRemoteUrl(
   if (privateHost && !allowPrivate && !loopbackHttp) {
     throw new Error("Connector URL targets a private host");
   }
-  if (privateHost || loopbackHttp) return url;
+  if (loopbackHttp) return url;
+  if (privateHost && isIP(hostname) !== 0) return url;
   const addresses = await resolve(hostname);
   assertAllowedAddresses(addresses, hostname, policy);
   if (url.protocol === "http:" && addresses.some((entry) => !isPrivateAddress(entry.address))) {

@@ -211,6 +211,7 @@ import {
   CATALOG_EXECUTE,
   uniquifyInstalledToolName,
 } from "./lazy-tool-catalog.js";
+import { actorMayUsePrivateRemoteMcp } from "./mcp-private-endpoint.js";
 import {
   buildMcpCredentialBlob,
   needsOAuthProbe,
@@ -247,9 +248,8 @@ import {
   renderPlotSpecToSvg,
   searchChartCatalog,
 } from "./plot-tool.js";
-import { actorMayUsePrivateRemoteMcp } from "./mcp-private-endpoint.js";
-import { assertSafeRemoteUrl } from "./remote-mcp.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
+import { assertSafeRemoteUrl } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import {
   commitConsumedRunSecret,
