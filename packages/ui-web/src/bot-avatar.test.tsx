@@ -63,6 +63,12 @@ describe("BotAvatar", () => {
     expect(parsed.isImage).toBe(false);
   });
 
+  it("normalizes malformed shape suffixes to shape 0", () => {
+    expect(parseBotAvatar(`${DEFAULT_GROK_BOT_COLOR}::shape_-1`).shapeIndex).toBe(0);
+    expect(parseBotAvatar(`${DEFAULT_GROK_BOT_COLOR}::shape_3junk`).shapeIndex).toBe(0);
+    expect(parseBotAvatar(`${DEFAULT_GROK_BOT_COLOR}::shape_`).shapeIndex).toBe(0);
+  });
+
   it("exposes the violet identity color as the shared default", () => {
     expect(GROK_BOT_COLORS).toContain(DEFAULT_GROK_BOT_COLOR);
     expect(parseBotAvatar(`${DEFAULT_GROK_BOT_COLOR}::shape_0`).color).toBe(DEFAULT_GROK_BOT_COLOR);
@@ -70,8 +76,14 @@ describe("BotAvatar", () => {
 
   it("resolves explicit colors and shapes", () => {
     expect(resolvePersonaColorDef("bot", "#10B981").hex.toLowerCase()).toBe("#10b981");
+    expect(resolvePersonaColorDef("bot", "#fff").hex).toBe("#fff");
     expect(resolvePersonaShape("bot", "hex")).toContain("M");
     expect(GROK_BOT_COLORS.length).toBeGreaterThan(0);
+  });
+
+  it("falls back to the identity palette for invalid custom hex", () => {
+    expect(resolvePersonaColorDef("bot", "#zzzzzz")).toEqual(resolvePersonaColorDef("bot"));
+    expect(resolvePersonaColorDef("bot", "#ggg")).toEqual(resolvePersonaColorDef("bot"));
   });
 
   it("renders uploaded images without the geometric svg", () => {

@@ -172,10 +172,7 @@ export function resolvePersonaColorDef(
     const foundByHex = GROK_COLOR_LIST.find((c) => c.hex.toLowerCase() === clean);
     if (foundByHex) return foundByHex;
     // If custom hex, synthesize gradient
-    if (
-      explicitColor.startsWith("#") &&
-      (explicitColor.length === 7 || explicitColor.length === 4)
-    ) {
+    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(explicitColor)) {
       const isBright = isColorBright(explicitColor);
       return {
         id: "custom",
@@ -253,10 +250,12 @@ export function parseBotAvatar(
   }
   if (rawColor.includes("::shape_")) {
     const parts = rawColor.split("::shape_");
-    const shapeIdx = parseInt(parts[1] ?? "0", 10);
+    const rawShapeIdx = parts[1] ?? "0";
+    const parsedShapeIdx = /^\d+$/.test(rawShapeIdx) ? Number(rawShapeIdx) : 0;
+    const shapeIdx = Number.isSafeInteger(parsedShapeIdx) ? parsedShapeIdx : 0;
     return {
       color: parts[0] || "#F97316",
-      shapeIndex: Number.isNaN(shapeIdx) ? undefined : shapeIdx % SHIPPED_SHAPE_KEYS.length,
+      shapeIndex: shapeIdx % SHIPPED_SHAPE_KEYS.length,
       isImage: false,
     };
   }
