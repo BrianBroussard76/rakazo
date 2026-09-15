@@ -1,10 +1,11 @@
 import { lookup } from "node:dns/promises";
-import { isIP, type LookupFunction } from "node:net";
+import type { LookupFunction } from "node:net";
+import { isIP } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { ConnectorTool } from "@rakazo/adapter-kit";
 import { isLocalMcpHost } from "@rakazo/contracts";
-import { Agent } from "undici";
+import { Agent, fetch as undiciFetch } from "undici";
 import { combineSignals } from "./connector-safety.js";
 import {
   createAddressCheckedLookup,
@@ -13,8 +14,8 @@ import {
   isTailscaleAddress,
   type ResolvedAddress,
   type ResolveHostname,
+  withPinnedDnsLookup,
 } from "./network-address.js";
-import { dispatcherFetch } from "./undici-fetch.js";
 
 const MAX_MCP_TOOLS = 250;
 const MAX_MCP_PAGES = 20;
@@ -127,6 +128,14 @@ export async function assertSafeRemoteUrl(
   resolve: ResolveHostname = resolveHostname,
   policy: RemoteUrlPolicy = {},
 ): Promise<URL> {
+  return (await inspectSafeRemoteUrl(value, resolve, policy)).url;
+}
+
+async function inspectSafeRemoteUrl(
+  value: string,
+  resolve: ResolveHostname,
+  policy: RemoteUrlPolicy = {},
+): Promise<{ url: URL; addresses: ResolvedAddress[] }> {
   let url: URL;
   try {
     url = new URL(value);
@@ -149,34 +158,62 @@ export async function assertSafeRemoteUrl(
   if (privateHost && !allowPrivate && !loopbackHttp) {
     throw new Error("Connector URL targets a private host");
   }
-  if (loopbackHttp) return url;
-  if (privateHost && isIP(hostname) !== 0) return url;
+  const literal = literalAddresses(hostname);
+  if (loopbackHttp) return { url, addresses: literal ?? [] };
+  if (privateHost && literal) return { url, addresses: literal };
   const addresses = await resolve(hostname);
   assertAllowedAddresses(addresses, hostname, policy);
   if (url.protocol === "http:" && addresses.some((entry) => !isPrivateAddress(entry.address))) {
     throw new Error("Connector URL must use HTTPS");
   }
-  return url;
+  return { url, addresses };
+}
+
+/** Drive the package `Agent` with that same undici's fetch. Node 22's
+ * built-in fetch is an older undici major, so handing it a package Agent as
+ * `dispatcher` throws `invalid onRequestStart` before any socket opens.
+ * Captured Node fetch is paired the same way. Injected fetches are not given
+ * that Agent; they keep the original hostname for TLS/SNI and pin TCP to the
+ * already-validated address through `dns.lookup`. */
+const packageFetch = undiciFetch as unknown as typeof globalThis.fetch;
+const nodeFetch = globalThis.fetch;
+
+function requestInitWithHost(url: URL, init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers);
+  headers.set("host", url.host);
+  return { ...init, headers };
+}
+
+function literalAddresses(hostname: string): ResolvedAddress[] | undefined {
+  const family = isIP(hostname);
+  if (family === 0) return undefined;
+  return [{ address: hostname, family }];
 }
 
 export function createSafeRemoteFetch(
-  baseFetch: typeof globalThis.fetch = dispatcherFetch,
+  baseFetch?: typeof globalThis.fetch,
   resolve: ResolveHostname = resolveHostname,
   policy: RemoteUrlPolicy = {},
 ): SafeRemoteFetch {
   const dispatcher = new Agent({ connect: { lookup: createSafeLookup(resolve, policy) } });
+  const usePackageFetch =
+    baseFetch == null || baseFetch === nodeFetch || baseFetch === packageFetch;
   const safeFetch = async (input: string | URL | Request, init?: RequestInit) => {
     if (typeof input !== "string" && !(input instanceof URL)) {
       throw new Error("Connector fetch requires a URL, not a Request");
     }
-    const url = await assertSafeRemoteUrl(String(input), resolve, policy);
+    const { url, addresses } = await inspectSafeRemoteUrl(String(input), resolve, policy);
     let response: Response;
     try {
-      response = await baseFetch(url, {
-        ...init,
-        redirect: "manual",
-        dispatcher,
-      } as RequestInit & { dispatcher: Agent });
+      const requestInit = { ...init, redirect: "manual" as const };
+      response = usePackageFetch
+        ? await packageFetch(url, {
+            ...requestInit,
+            dispatcher,
+          } as RequestInit & { dispatcher: Agent })
+        : await withPinnedDnsLookup(url.hostname, addresses, () =>
+            baseFetch!(url, requestInitWithHost(url, requestInit)),
+          );
     } catch (error) {
       const detail = transportFailureDetail(error);
       throw new Error(`Could not reach ${url.host}${detail ? `: ${detail}` : ""}`, {
