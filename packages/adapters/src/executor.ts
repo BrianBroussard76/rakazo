@@ -1972,6 +1972,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 executionId,
                 consumedEffectIds,
               );
+          if (applied?.collision) return foreignToolEffectCollisionResult();
 
           const runAutoReview = async () => {
             if (!checker) return;
@@ -2997,6 +2998,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               }
               const recordedEffect = await recordEffect(deps, run, name, effectKey, args);
+              if (recordedEffect.collision) return foreignToolEffectCollisionResult();
               if (recordedEffect?.duplicate) {
                 const gate = resolveDuplicateEffectGate(recordedEffect.effect, name);
                 if (gate.action === "execute") {
@@ -3053,6 +3055,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               });
             }
             const recordedForAsk = await recordEffect(deps, run, name, effectKey, args);
+            if (recordedForAsk.collision) return foreignToolEffectCollisionResult();
             const missingSecretAction = resolveMissingRunSecretAction(recordedForAsk.effect);
             if (missingSecretAction.action === "return") return missingSecretAction.result;
             const connectionId = args.connectionId ? String(args.connectionId) : undefined;
@@ -4622,6 +4625,27 @@ async function persistMessageInTransaction(
   return { message, eventSeq: event.seq };
 }
 
+function foreignToolEffectCollisionResult(): { error: string } {
+  return {
+    error: "This action did not run; it matched another bot's stored tool result. Retry.",
+  };
+}
+
+function externalEffectMatchesCall(
+  effect: { runId: string; kind: string; request: unknown },
+  runId: string,
+  kind: string,
+  expectedRequest: string | undefined,
+): boolean {
+  if (effect.runId !== runId || effect.kind !== kind) return false;
+  if (expectedRequest === undefined) return true;
+  try {
+    return stableJsonValue(effect.request) === expectedRequest;
+  } catch {
+    return false;
+  }
+}
+
 async function recordEffect(
   deps: ExecutorDeps,
   run: { id: string; spaceId: string; threadId: string; botId: string },
@@ -4631,10 +4655,22 @@ async function recordEffect(
   legacyIdempotencyKey?: string,
   consumedIds?: Set<string>,
 ) {
+  let expectedRequest: string | undefined;
+  try {
+    expectedRequest = stableJsonValue(request);
+  } catch {
+    expectedRequest = undefined;
+  }
+
   const existing = await deps.prisma.externalEffect.findUnique({
     where: { idempotencyKey },
   });
   if (existing) {
+    // Provider ids like call_0 are reused across bots. Never return another
+    // run or tool's stored result, including a completed handoff stub.
+    if (!externalEffectMatchesCall(existing, run.id, kind, expectedRequest)) {
+      return { duplicate: false as const, collision: true as const, effect: existing };
+    }
     consumedIds?.add(existing.id);
     await deps.events.append({
       spaceId: run.spaceId,
@@ -4644,18 +4680,12 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: idempotencyKey, kind },
     });
-    return { duplicate: true, effect: existing };
+    return { duplicate: true as const, collision: false as const, effect: existing };
   }
 
   // Pre-fix rows used bare provider ids or scoped keys that included the
   // ephemeral model tool-call id. Same-id unique lookup still works; a restart
   // with a new id finds the row by run, tool, and request instead.
-  let expectedRequest: string | undefined;
-  try {
-    expectedRequest = stableJsonValue(request);
-  } catch {
-    expectedRequest = undefined;
-  }
   if (legacyIdempotencyKey && legacyIdempotencyKey !== idempotencyKey && expectedRequest) {
     const scopedLegacy =
       request && typeof request === "object" && !Array.isArray(request)
@@ -4674,9 +4704,7 @@ async function recordEffect(
       if (
         sameIdLegacy &&
         !consumedIds?.has(sameIdLegacy.id) &&
-        sameIdLegacy.runId === run.id &&
-        sameIdLegacy.kind === kind &&
-        stableJsonValue(sameIdLegacy.request) === expectedRequest
+        externalEffectMatchesCall(sameIdLegacy, run.id, kind, expectedRequest)
       ) {
         consumedIds?.add(sameIdLegacy.id);
         await deps.events.append({
@@ -4687,7 +4715,7 @@ async function recordEffect(
           runId: run.id,
           payload: { executionId: candidate, kind, legacy: true },
         });
-        return { duplicate: true, effect: sameIdLegacy };
+        return { duplicate: true as const, collision: false as const, effect: sameIdLegacy };
       }
     }
   }
@@ -4721,7 +4749,7 @@ async function recordEffect(
       runId: run.id,
       payload: { executionId: legacy.idempotencyKey, kind, legacy: true },
     });
-    return { duplicate: true, effect: legacy };
+    return { duplicate: true as const, collision: false as const, effect: legacy };
   }
 
   const effect = await deps.prisma.externalEffect.create({
@@ -4735,7 +4763,7 @@ async function recordEffect(
     },
   });
   consumedIds?.add(effect.id);
-  return { duplicate: false, effect };
+  return { duplicate: false as const, collision: false as const, effect };
 }
 
 async function completeEffect(

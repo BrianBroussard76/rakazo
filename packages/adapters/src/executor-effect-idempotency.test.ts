@@ -38,6 +38,13 @@ type ToolCall = {
   executionId: string;
 };
 
+const STALE_HANDOFF_RESULT = {
+  ok: true,
+  note: "Handoff recorded. End this turn without narrating it; the next bot owns the next stage.",
+  botId: "bot-other",
+  runId: "run-other",
+};
+
 function fixture(runId = "run-1") {
   const effects: Effect[] = [];
   const results: unknown[] = [];
@@ -534,5 +541,58 @@ describe("mutating tool effect idempotency keys", () => {
     expect(f.memoryCommit).not.toHaveBeenCalled();
     expect(f.effects).toHaveLength(1);
     expect(f.results[0]).toEqual({ ok: true, legacy: true });
+  });
+
+  it("executes a mutation whose reused provider id matches another bot's leftover handoff", async () => {
+    const f = fixture("run-a");
+    f.effects.push({
+      id: "foreign-handoff",
+      runId: "run-other",
+      kind: "handoff_to_bot",
+      idempotencyKey: "call_0",
+      status: "completed",
+      request: { bot_id: "bot-other", confirm_name: "Other", message: "your turn" },
+      result: STALE_HANDOFF_RESULT,
+    });
+    f.setCalls([
+      {
+        name: "scratchpad_add",
+        args: { title: "follow up with design" },
+        executionId: "call_0",
+      },
+    ]);
+
+    await f.run();
+
+    expect(f.scratchpadRows).toHaveLength(1);
+    expect(f.results[0]).toEqual(
+      expect.objectContaining({
+        item: expect.objectContaining({ title: "follow up with design" }),
+      }),
+    );
+    expect(f.results[0]).not.toMatchObject(STALE_HANDOFF_RESULT);
+  });
+
+  it("does not return another bot's handoff stub when the effect key is already taken", async () => {
+    const args = { title: "follow up with design" };
+    const f = fixture("run-a");
+    f.effects.push({
+      id: "foreign-handoff-key",
+      runId: "run-other",
+      kind: "handoff_to_bot",
+      idempotencyKey: toolEffectIdempotencyKey("run-a", "scratchpad_add", args),
+      status: "completed",
+      request: { bot_id: "bot-other", confirm_name: "Other", message: "your turn" },
+      result: STALE_HANDOFF_RESULT,
+    });
+    f.setCalls([{ name: "scratchpad_add", args, executionId: "call_0" }]);
+
+    await f.run();
+
+    expect(f.scratchpadRows).toHaveLength(0);
+    expect(f.results[0]).toEqual({
+      error: "This action did not run; it matched another bot's stored tool result. Retry.",
+    });
+    expect(f.results[0]).not.toMatchObject(STALE_HANDOFF_RESULT);
   });
 });
