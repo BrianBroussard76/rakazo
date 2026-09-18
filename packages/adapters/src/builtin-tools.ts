@@ -780,7 +780,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "update_bot",
     description:
-      "Update this bot's own profile fields that the user sees in chat: name (header and list label), title (short role line), and description. Call this when the user asks you to rename yourself or change your title/description. Do not claim you updated the profile without calling this tool.",
+      "Update this bot's own name (header and list label), title, description, or notifyOnFinish. Call this when the user asks you to rename yourself, change your title/description, or turn finish notifications on or off. Do not claim you updated the profile without calling this tool.",
     inputSchema: {
       type: "object",
       properties: {
@@ -795,6 +795,10 @@ export const builtinAgentTools: ConnectorTool[] = [
         description: {
           type: "string",
           description: "Longer blurb describing what this bot does.",
+        },
+        notifyOnFinish: {
+          type: "boolean",
+          description: "true notifies the user when this bot finishes a run; false silences that.",
         },
       },
     },

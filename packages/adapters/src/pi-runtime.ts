@@ -834,6 +834,15 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           computer_mode: raw.computer_mode ? String(raw.computer_mode) : "",
         };
       }
+      if (tool.name === "update_bot") {
+        const notifyRaw = raw.notifyOnFinish ?? raw.notify_on_finish;
+        return {
+          ...(raw.name !== undefined ? { name: String(raw.name) } : {}),
+          ...(raw.title !== undefined ? { title: String(raw.title) } : {}),
+          ...(raw.description !== undefined ? { description: String(raw.description) } : {}),
+          ...(notifyRaw !== undefined ? { notifyOnFinish: notifyRaw } : {}),
+        };
+      }
       if (tool.name === "create_space") {
         return { name: String(raw.name ?? "") };
       }
@@ -1235,6 +1244,14 @@ function builtinParameters(tool: ConnectorTool) {
       instructions: Type.Optional(Type.String()),
       prompt: Type.Optional(Type.String()),
       computer_mode: Type.Optional(Type.Union([Type.Literal("team"), Type.Literal("dedicated")])),
+    });
+  }
+  if (tool.name === "update_bot") {
+    return Type.Object({
+      name: Type.Optional(Type.String()),
+      title: Type.Optional(Type.String()),
+      description: Type.Optional(Type.String()),
+      notifyOnFinish: Type.Optional(Type.Boolean()),
     });
   }
   if (tool.name === "create_space") {
