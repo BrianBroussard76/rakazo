@@ -40,14 +40,8 @@ import {
   registerOpenAiCompatibleCatalog,
   registerOpenAiCompatibleRuntime,
 } from "./pi-openai-compatible-provider.js";
-import {
-  billedPromptTokens,
-  clipToolResultContent,
-  clipToolResultText,
-  MODEL_STREAM_MAX_RETRIES,
-  MODEL_STREAM_TIMEOUT_MS,
-  resolveCompletionMaxTokens,
-} from "./pi-runtime-limits.js";
+import { billedPromptTokens, clipToolResultContent, clipToolResultText, MODEL_STREAM_MAX_RETRIES, MODEL_STREAM_TIMEOUT_MS, resolveCompletionMaxTokens } from "./pi-runtime-limits.js";
+import { callBrokerSubagent } from "./broker-subagent.js";
 import {
   PiJsonlSessionRecorder,
   type PiSessionHandle,
@@ -257,7 +251,11 @@ export class PiAgentRuntime implements AgentRuntime {
           sessionId: conversationSessionId(request.threadId, request.botId),
           steeringMode: "all",
           streamFn: (m, ctx, options) =>
-            models.streamSimple(m, ctx, reliableStreamOptions(m, options, request.model.maxTokens)),
+            models.streamSimple(
+              m,
+              ctx,
+              withSwitchboardChatId(m, reliableStreamOptions(m, options, request.model.maxTokens), request.threadId),
+            ),
           getApiKey: async () => apiKey,
           transformContext: async (messages) =>
             pruneComputerScreenshotContext(messages, request.model.maxImagesPerPrompt),
@@ -921,7 +919,25 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
             };
           }
           if (tool.name === "run_subagent") {
-            const result = await executeSubagent(host, executionId, args);
+            const brokerMcpUrl = process.env.RAKAZO_BROKER_MCP_URL;
+            const brokerMcpKey = process.env.RAKAZO_BROKER_MCP_KEY;
+            const brokerMcpTool = process.env.RAKAZO_BROKER_MCP_TOOL;
+            const result =
+              brokerMcpUrl && brokerMcpKey && brokerMcpTool
+                ? await callBrokerSubagent(
+                    host,
+                    executionId,
+                    args,
+                    brokerMcpUrl,
+                    brokerMcpKey,
+                    brokerMcpTool,
+                    {
+                      botId: host.request.botId,
+                      runId: host.request.runId,
+                      threadId: host.request.threadId,
+                    },
+                  )
+                : await executeSubagent(host, executionId, args);
             return {
               content: [{ type: "text", text: result }],
               details: { result },
@@ -1033,7 +1049,11 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
       selectedModel.models.streamSimple(
         m,
         ctx,
-        reliableStreamOptions(m, options, requestModel.maxTokens),
+        withSwitchboardChatId(
+          m,
+          reliableStreamOptions(m, options, requestModel.maxTokens),
+          host.request.threadId,
+        ),
       ),
     getApiKey: async () => selectedModel.apiKey,
     transformContext: async (messages) =>
@@ -1503,6 +1523,20 @@ export function conversationSessionId(threadId: string, botId: string, agentId?:
 
 export function isOpenCodeProvider(provider: string): boolean {
   return provider === "opencode" || provider === "opencode-go";
+}
+
+export function withSwitchboardChatId(
+  model: Pick<Model<Api>, "provider">,
+  options: SimpleStreamOptions,
+  threadId: string,
+): SimpleStreamOptions {
+  if (model.provider !== OPENAI_COMPATIBLE_PROVIDER_ID) return options;
+  const id = threadId.trim();
+  if (!id) return options;
+  return {
+    ...options,
+    headers: { ...options.headers, "x-switchboard-chat-id": id },
+  };
 }
 
 const OPENCODE_SESSION_ERROR = "OpenCode rejected this chat session. Send the message again.";

@@ -1,7 +1,7 @@
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { DEFAULT_MODEL_MAX_TOKENS } from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
-import { conversationSessionId, isOpenCodeProvider, reliableStreamOptions } from "./pi-runtime.js";
+import { conversationSessionId, isOpenCodeProvider, reliableStreamOptions, withSwitchboardChatId } from "./pi-runtime.js";
 import { MODEL_STREAM_MAX_RETRIES, MODEL_STREAM_TIMEOUT_MS } from "./pi-runtime-limits.js";
 
 const streamDefaults = {
@@ -89,5 +89,34 @@ describe("Pi runtime transport", () => {
   it("keeps a stable conversation session id per bot thread", () => {
     expect(conversationSessionId("thread-1", "bot-1")).toBe("thread-1:bot-1");
     expect(conversationSessionId("thread-1", "bot-1", "sub-1")).toBe("thread-1:bot-1:sub-1");
+  });
+
+  it("attaches x-switchboard-chat-id only for openai-compatible", () => {
+    const options = { transport: "auto" as const, headers: { "X-Custom": "1" } };
+    const tagged = withSwitchboardChatId(
+      { provider: "openai-compatible" } as Model<Api>,
+      options,
+      "clthread0000000000000001",
+    );
+    expect(tagged.headers).toEqual({
+      "X-Custom": "1",
+      "x-switchboard-chat-id": "clthread0000000000000001",
+    });
+    const skipped = withSwitchboardChatId(
+      { provider: "anthropic" } as Model<Api>,
+      options,
+      "clthread0000000000000001",
+    );
+    expect(skipped.headers).toEqual({ "X-Custom": "1" });
+    const opencode = withSwitchboardChatId(
+      { provider: "opencode" } as Model<Api>,
+      reliableStreamOptions({ provider: "opencode", api: "openai-completions" } as Model<Api>, {
+        sessionId: "thread-1:bot-1",
+        transport: "auto",
+      }),
+      "clthread0000000000000001",
+    );
+    expect(opencode.headers?.["x-switchboard-chat-id"]).toBeUndefined();
+    expect(opencode.headers?.["x-opencode-session"]).toBe("thread-1:bot-1");
   });
 });

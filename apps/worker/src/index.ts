@@ -26,6 +26,7 @@ import {
   isComposioEnabled,
   isMessagingSurfaceEnabled,
   isPipedreamEnabled,
+  listenBotHomeMcp,
   LocalAgentHomeStore,
   LocalArtifactStore,
   McpConnector,
@@ -243,11 +244,28 @@ async function main() {
   });
   reconciler.start();
 
+  const botHomePort = Number(process.env.RAKAZO_BOT_HOME_LISTEN_PORT ?? 0);
+  const botHome =
+    Number.isFinite(botHomePort) && botHomePort > 0
+      ? await listenBotHomeMcp({
+          port: botHomePort,
+          authKey: process.env.RAKAZO_BOT_HOME_MCP_KEY ?? "",
+          sandbox,
+          prisma,
+          artifacts,
+          events,
+        }).then((handle) => {
+          logger.info(`bot-home MCP listening on :${botHomePort}`);
+          return handle;
+        })
+      : undefined;
+
   let stopping = false;
   const stop = async () => {
     if (stopping) return;
     stopping = true;
     try {
+      await botHome?.close().catch(() => undefined);
       await reconciler.stop();
       await jobHost.stop();
       await jobs.close();
