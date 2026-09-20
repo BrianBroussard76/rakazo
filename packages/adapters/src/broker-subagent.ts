@@ -1,5 +1,6 @@
-import { overlayMeta } from "./bot-home-identity.js";
+import { META_RUN_ID, overlayMeta } from "./bot-home-identity.js";
 import { McpSession } from "./mcp-transport.js";
+import { switchboardCallHeaders, switchboardCallMeta, type SwitchboardIds } from "./switchboard-ids.js";
 
 /**
  * Verified against executeSubagent in pi-runtime.ts: host.queue.push({ type: "subagent",
@@ -61,6 +62,7 @@ export async function callBrokerSubagent(
   mcpKey: string,
   mcpTool: string,
   identity: BrokerSubagentIdentity,
+  switchboard?: SwitchboardIds,
 ): Promise<string> {
   const name =
     String(args.name ?? "helper")
@@ -89,9 +91,12 @@ export async function callBrokerSubagent(
       signal: host.signal,
     });
 
+    const rakazoMeta = overlayMeta(identity);
+    delete rakazoMeta[META_RUN_ID];
     const result = await session.callTool(wire, args, {
       signal: host.signal,
-      meta: overlayMeta(identity),
+      meta: { ...rakazoMeta, ...switchboardCallMeta(switchboard) },
+      headers: switchboardCallHeaders(switchboard),
     });
     const text = clip(textFromResult(result));
     if (looksFailed(result, text)) {

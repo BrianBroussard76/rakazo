@@ -48,6 +48,8 @@ import {
   type PiSessionRecorder,
 } from "./pi-session.js";
 import { textContentArg } from "./tool-text.js";
+import { dispatcherFetch } from "./undici-fetch.js";
+import { switchboardSink, tapSwitchboardResponse, type SwitchboardIds } from "./switchboard-ids.js";
 
 const running = new Map<string, { controller: AbortController; work: Promise<void> }>();
 interface ToolCallBudget {
@@ -254,7 +256,15 @@ export class PiAgentRuntime implements AgentRuntime {
             models.streamSimple(
               m,
               ctx,
-              withSwitchboardChatId(m, reliableStreamOptions(m, options, request.model.maxTokens), request.threadId),
+              withSwitchboardRunCapture(
+                m,
+                withSwitchboardChatId(
+                  m,
+                  reliableStreamOptions(m, options, request.model.maxTokens),
+                  request.threadId,
+                ),
+                switchboardSink(request),
+              ),
             ),
           getApiKey: async () => apiKey,
           transformContext: async (messages) =>
@@ -936,6 +946,7 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                       runId: host.request.runId,
                       threadId: host.request.threadId,
                     },
+                    host.request.switchboard,
                   )
                 : await executeSubagent(host, executionId, args);
             return {
@@ -1049,10 +1060,14 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
       selectedModel.models.streamSimple(
         m,
         ctx,
-        withSwitchboardChatId(
+        withSwitchboardRunCapture(
           m,
-          reliableStreamOptions(m, options, requestModel.maxTokens),
-          host.request.threadId,
+          withSwitchboardChatId(
+            m,
+            reliableStreamOptions(m, options, requestModel.maxTokens),
+            host.request.threadId,
+          ),
+          switchboardSink(host.request),
         ),
       ),
     getApiKey: async () => selectedModel.apiKey,
@@ -1537,6 +1552,27 @@ export function withSwitchboardChatId(
     ...options,
     headers: { ...options.headers, "x-switchboard-chat-id": id },
   };
+}
+
+export function withSwitchboardRunCapture(
+  model: Pick<Model<Api>, "provider">,
+  options: SimpleStreamOptions,
+  sink: SwitchboardIds,
+): SimpleStreamOptions {
+  if (model.provider !== OPENAI_COMPATIBLE_PROVIDER_ID) return options;
+  const current = options as SimpleStreamOptions & { fetch?: typeof fetch };
+  const inner = current.fetch ?? dispatcherFetch;
+  return {
+    ...options,
+    fetch: async (input, init) => {
+      const response = await inner(input, init);
+      const ctype = response.headers.get("content-type") ?? "";
+      if (ctype.includes("text/event-stream") || ctype.includes("json")) {
+        void tapSwitchboardResponse(response.clone(), sink).catch(() => undefined);
+      }
+      return response;
+    },
+  } as SimpleStreamOptions;
 }
 
 const OPENCODE_SESSION_ERROR = "OpenCode rejected this chat session. Send the message again.";

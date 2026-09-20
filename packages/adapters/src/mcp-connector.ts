@@ -22,6 +22,11 @@ import {
 import type { McpOAuthBroker, OAuthMaterial } from "./mcp-oauth.js";
 import { oauthMaterialSecrets } from "./mcp-oauth.js";
 import { McpSession } from "./mcp-transport.js";
+import {
+  brokerIdsFromContext,
+  switchboardCallHeaders,
+  switchboardCallMeta,
+} from "./switchboard-ids.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 
@@ -208,8 +213,11 @@ export class McpConnector implements ConnectorProvider {
     try {
       const session = await this.sessionFor(assignment.server, context);
       material = this.sessions.get(this.sessionKey(assignment.server, context))?.material;
+      const ids = brokerIdsFromContext(context);
       const result = await session.callTool(call.route.toolName, call.args, {
         signal: context.signal,
+        meta: switchboardCallMeta(ids),
+        headers: switchboardCallHeaders(ids),
       });
       const secrets = material ? oauthMaterialSecrets(material) : [];
       yield { type: "result", data: redactConnectorPayload(result, secrets) };

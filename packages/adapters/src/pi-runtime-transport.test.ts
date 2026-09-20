@@ -1,7 +1,7 @@
-import type { Api, Model } from "@earendil-works/pi-ai";
+import type { Api, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { DEFAULT_MODEL_MAX_TOKENS } from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
-import { conversationSessionId, isOpenCodeProvider, reliableStreamOptions, withSwitchboardChatId } from "./pi-runtime.js";
+import { conversationSessionId, isOpenCodeProvider, reliableStreamOptions, withSwitchboardChatId, withSwitchboardRunCapture } from "./pi-runtime.js";
 import { MODEL_STREAM_MAX_RETRIES, MODEL_STREAM_TIMEOUT_MS } from "./pi-runtime-limits.js";
 
 const streamDefaults = {
@@ -118,5 +118,29 @@ describe("Pi runtime transport", () => {
     );
     expect(opencode.headers?.["x-switchboard-chat-id"]).toBeUndefined();
     expect(opencode.headers?.["x-opencode-session"]).toBe("thread-1:bot-1");
+  });
+
+  it("captures switchboard.run_id from an OpenAI-compatible SSE fetch", async () => {
+    const sink: { runId?: string; jobId?: string } = {};
+    const fetchImpl: typeof fetch = async () =>
+      new Response('data: {"switchboard":{"run_id":"sse-run","job_id":"j1"}}\n\n', {
+        headers: { "content-type": "text/event-stream" },
+      });
+    const tagged = withSwitchboardRunCapture(
+      { provider: "openai-compatible" } as Model<Api>,
+      { fetch: fetchImpl },
+      sink,
+    );
+    const skipped = withSwitchboardRunCapture(
+      { provider: "anthropic" } as Model<Api>,
+      { fetch: fetchImpl },
+      sink,
+    );
+    expect((skipped as SimpleStreamOptions & { fetch?: typeof fetch }).fetch).toBe(fetchImpl);
+    const taggedFetch = (tagged as SimpleStreamOptions & { fetch?: typeof fetch }).fetch;
+    const response = await taggedFetch!("https://broker.test/v1/chat/completions");
+    await response.text();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sink).toEqual({ runId: "sse-run", jobId: "j1" });
   });
 });
