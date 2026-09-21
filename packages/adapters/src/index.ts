@@ -7,6 +7,8 @@ export * from "./background-job-handlers.js";
 export * from "./bot-home-identity.js";
 export * from "./bot-home-mcp.js";
 export * from "./bot-home-tools.js";
+export * from "./broker-mcp.js";
+export * from "./broker-sandbox.js";
 export * from "./bot-messages.js";
 export * from "./box-emulator.js";
 export * from "./box-sandbox.js";

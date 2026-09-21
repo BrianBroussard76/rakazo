@@ -305,6 +305,8 @@ export class PiAgentRuntime implements AgentRuntime {
         signal.addEventListener("abort", onAbort);
 
         let streamed = "";
+        let bannerParsed = false;
+        let bannerBuffer = "";
         let toolCalls = 0;
         let toolActivityShowing = false;
         let silentToolContinuations = 0;
@@ -329,15 +331,35 @@ export class PiAgentRuntime implements AgentRuntime {
             event.type === "message_update" &&
             event.assistantMessageEvent.type === "text_delta"
           ) {
-            const delta = event.assistantMessageEvent.delta;
-            if (delta) {
-              if (toolActivityShowing) {
-                // Real text replaces the activity line instead of appending to it.
-                toolActivityShowing = false;
-                queue.push({ type: "progress", text: "", activity: true });
+            const rawDelta = event.assistantMessageEvent.delta;
+            if (rawDelta) {
+              // Strip [switchboard] routing notice banner from the leading text of each
+              // assistant message. The broker prepends these diagnostic lines followed
+              // by a blank line; buffer deltas until we see "\n\n", then decide.
+              let delta: string | undefined = rawDelta;
+              if (!bannerParsed) {
+                bannerBuffer += rawDelta;
+                const sep = bannerBuffer.indexOf("\n\n");
+                if (sep === -1) {
+                  delta = undefined; // Still accumulating banner header; nothing to emit yet
+                } else {
+                  bannerParsed = true;
+                  const stripped = bannerBuffer.trimStart().startsWith("[switchboard]")
+                    ? bannerBuffer.slice(sep + 2) // drop banner lines + blank line
+                    : bannerBuffer;               // no banner; emit everything buffered
+                  bannerBuffer = "";
+                  delta = stripped || undefined;
+                }
               }
-              streamed += delta;
-              queue.push({ type: "text", text: delta });
+              if (delta) {
+                if (toolActivityShowing) {
+                  // Real text replaces the activity line instead of appending to it.
+                  toolActivityShowing = false;
+                  queue.push({ type: "progress", text: "", activity: true });
+                }
+                streamed += delta;
+                queue.push({ type: "text", text: delta });
+              }
             }
           }
           if (event.type === "turn_end") {
@@ -371,6 +393,9 @@ export class PiAgentRuntime implements AgentRuntime {
             }
           }
           if (event.type === "message_end" && event.message.role === "assistant") {
+            // Reset banner state so the next assistant turn gets stripped independently.
+            bannerParsed = false;
+            bannerBuffer = "";
             const text = assistantText(event.message);
             if (text && !streamed) {
               streamed = text;
@@ -929,9 +954,9 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
             };
           }
           if (tool.name === "run_subagent") {
-            const brokerMcpUrl = process.env.RAKAZO_BROKER_MCP_URL;
+            const brokerMcpUrl = process.env.RAKAZO_BROKER_HELPER_MCP_URL;
             const brokerMcpKey = process.env.RAKAZO_BROKER_MCP_KEY;
-            const brokerMcpTool = process.env.RAKAZO_BROKER_MCP_TOOL;
+            const brokerMcpTool = process.env.RAKAZO_BROKER_HELPER_MCP_TOOL;
             const result =
               brokerMcpUrl && brokerMcpKey && brokerMcpTool
                 ? await callBrokerSubagent(

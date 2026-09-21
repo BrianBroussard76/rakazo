@@ -6,6 +6,7 @@ import { builtinAgentTools } from "./builtin-tools.js";
 import { identityFromMeta } from "./bot-home-identity.js";
 import {
   BOT_HOME_TOOL_NAMES,
+  type BotHomeCallResult,
   type BotHomeToolDeps,
   executeBotHomeTool,
 } from "./bot-home-tools.js";
@@ -18,7 +19,22 @@ export type BotHomeMcpHandle = {
   close(): Promise<void>;
 };
 
-export function createBotHomeMcpServer(deps: BotHomeToolDeps): Server {
+export type BotHomeMcpDeps = BotHomeToolDeps & {
+  localSandbox?: BotHomeToolDeps["sandbox"];
+};
+
+function isBrokerNotSupported(result: BotHomeCallResult): boolean {
+  const first = result.content[0];
+  if (!first || first.type !== "text") return false;
+  try {
+    const parsed = JSON.parse(first.text) as { error?: string };
+    return parsed.error === "not available on broker sandbox";
+  } catch {
+    return false;
+  }
+}
+
+export function createBotHomeMcpServer(deps: BotHomeMcpDeps): Server {
   const server = new Server({ name: "rakazo-bot-home", version: "0.1.0" }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOLS.map((tool) => ({
@@ -32,16 +48,18 @@ export function createBotHomeMcpServer(deps: BotHomeToolDeps): Server {
     const args = (request.params.arguments ?? {}) as Record<string, unknown>;
     const identity = identityFromMeta(request.params._meta as Record<string, unknown> | undefined);
     const result = await executeBotHomeTool(deps, identity, name, args);
-    return {
-      content: result.content,
-      isError: result.isError,
-    };
+    if (result.isError && isBrokerNotSupported(result) && deps.localSandbox) {
+      const localDeps: BotHomeToolDeps = { ...deps, sandbox: deps.localSandbox };
+      const localResult = await executeBotHomeTool(localDeps, identity, name, args);
+      return { content: localResult.content, isError: localResult.isError };
+    }
+    return { content: result.content, isError: result.isError };
   });
   return server;
 }
 
 export async function listenBotHomeMcp(
-  deps: BotHomeToolDeps & { port: number; authKey?: string },
+  deps: BotHomeMcpDeps & { port: number; authKey?: string },
 ): Promise<BotHomeMcpHandle> {
   const authKey = deps.authKey?.trim() ?? "";
   const http = createServer((req, res) => {
@@ -62,7 +80,7 @@ export async function listenBotHomeMcp(
 async function handleBotHomeHttp(
   req: IncomingMessage,
   res: ServerResponse,
-  deps: BotHomeToolDeps,
+  deps: BotHomeMcpDeps,
   authKey: string,
 ): Promise<void> {
   if (authKey) {

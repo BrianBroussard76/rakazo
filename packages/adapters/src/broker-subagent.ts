@@ -1,5 +1,5 @@
 import { META_RUN_ID, overlayMeta } from "./bot-home-identity.js";
-import { McpSession } from "./mcp-transport.js";
+import { createBrokerSession } from "./broker-mcp.js";
 import { switchboardCallHeaders, switchboardCallMeta, type SwitchboardIds } from "./switchboard-ids.js";
 
 /**
@@ -81,16 +81,9 @@ export async function callBrokerSubagent(
   });
   await host.subagentGate.acquire();
 
-  const session = new McpSession();
+  let session: Awaited<ReturnType<typeof createBrokerSession>> | undefined;
   try {
-    await session.connectRemote({
-      url: mcpUrl,
-      urlPolicy: { allowHttpLocalhost: true, allowLocalHttpCredentials: true },
-      headerPolicy: { headers: { Authorization: `Bearer ${mcpKey}` } },
-      fallbackToSse: false,
-      signal: host.signal,
-    });
-
+    session = await createBrokerSession({ url: mcpUrl, key: mcpKey, signal: host.signal });
     const rakazoMeta = overlayMeta(identity);
     delete rakazoMeta[META_RUN_ID];
     const result = await session.callTool(wire, args, {
@@ -132,6 +125,6 @@ export async function callBrokerSubagent(
     return `Subagent failed: ${msg}`;
   } finally {
     host.subagentGate.release();
-    void session.close().catch(() => undefined);
+    void session?.close().catch(() => undefined);
   }
 }

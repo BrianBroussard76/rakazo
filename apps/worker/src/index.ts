@@ -26,6 +26,7 @@ import {
   isComposioEnabled,
   isMessagingSurfaceEnabled,
   isPipedreamEnabled,
+  BrokerSandboxProvider,
   listenBotHomeMcp,
   LocalAgentHomeStore,
   LocalArtifactStore,
@@ -245,12 +246,17 @@ async function main() {
   reconciler.start();
 
   const botHomePort = Number(process.env.RAKAZO_BOT_HOME_LISTEN_PORT ?? 0);
+  const brokerSandboxUrl = process.env.RAKAZO_BROKER_SANDBOX_MCP_URL ?? "";
+  const brokerSandbox = brokerSandboxUrl
+    ? new BrokerSandboxProvider(brokerSandboxUrl, process.env.RAKAZO_BROKER_MCP_KEY ?? "")
+    : undefined;
   const botHome =
     Number.isFinite(botHomePort) && botHomePort > 0
       ? await listenBotHomeMcp({
           port: botHomePort,
           authKey: process.env.RAKAZO_BOT_HOME_MCP_KEY ?? "",
-          sandbox,
+          sandbox: brokerSandbox ?? sandbox,
+          localSandbox: brokerSandbox ? sandbox : undefined,
           prisma,
           artifacts,
           events,
