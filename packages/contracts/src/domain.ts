@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { BotAvatarValueSchema } from "./bot-avatar.js";
 import { ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
@@ -161,6 +162,7 @@ export const SpaceBotSchema = BotSchema.pick({
   pinned: true,
   sectionId: true,
   unread: true,
+  parentBotId: true,
   preview: true,
   status: true,
   updatedAt: true,
@@ -285,7 +287,7 @@ export const CreateBotInput = z.object({
   description: z.string().max(BOT_DESCRIPTION_MAX_LENGTH).default(""),
   instructions: z.string().max(BOT_INSTRUCTIONS_MAX_LENGTH).default(""),
   notifyOnFinish: z.boolean().default(true),
-  color: z.string().optional(),
+  color: BotAvatarValueSchema.optional(),
   computerMode: ComputerModeSchema.default("team"),
   /** Idempotency key within a space (unique with spaceId). */
   spawnKey: z.string().trim().min(1).max(120).optional(),
@@ -312,7 +314,7 @@ export const UpdateBotInput = z
     description: z.string().trim().max(BOT_DESCRIPTION_MAX_LENGTH).optional(),
     instructions: z.string().trim().max(BOT_INSTRUCTIONS_MAX_LENGTH).optional(),
     notifyOnFinish: z.boolean().optional(),
-    color: z.string().optional(),
+    color: BotAvatarValueSchema.optional(),
     pinned: z.boolean().optional(),
     memoryScope: MemoryScopeSchema.nullable().optional(),
     sectionId: Id.nullable().optional(),
@@ -900,6 +902,17 @@ export function parseModelContextWindow(value: string): number | undefined {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_MODEL_CONTEXT_WINDOW
     ? parsed
     : undefined;
+}
+
+/**
+ * JS null/undefined stringifies to the literals "null" / "undefined". Those
+ * are not catalog ids; treat them (and blank values) as unset.
+ */
+export function usableModelId(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return null;
+  return trimmed;
 }
 
 export const ModelCredentialSchema = z.object({

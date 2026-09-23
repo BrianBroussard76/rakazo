@@ -25,6 +25,7 @@ import type {
   AgentToolExecutionResult,
   ConnectorTool,
 } from "@rakazo/adapter-kit";
+import { usableModelId } from "@rakazo/contracts";
 import { getLogger } from "@rakazo/logging";
 import { isToolPauseResult } from "./approval-effect.js";
 import { builtinAgentTools, DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
@@ -268,7 +269,10 @@ export class PiAgentRuntime implements AgentRuntime {
             ),
           getApiKey: async () => apiKey,
           transformContext: async (messages) =>
-            pruneComputerScreenshotContext(messages, request.model.maxImagesPerPrompt),
+            pruneComputerScreenshotContext(
+              pruneStalePageStateContext(messages),
+              request.model.maxImagesPerPrompt,
+            ),
           prepareNextTurnWithContext: async () => {
             if (!request.claimSteering) return undefined;
             const steering = await request.claimSteering([...seenSteeringIds]);
@@ -520,7 +524,7 @@ function configuredOpenRouterModel(id: string): Model<"openai-completions"> {
   };
 }
 
-function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
+export function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
   provider: string;
   modelId: string;
   models: Models;
@@ -530,10 +534,9 @@ function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
   const provider = modelConfig.provider === "scripted" ? "openrouter" : modelConfig.provider;
   const envDefaultModel = process.env.PI_DEFAULT_MODEL?.trim();
   const envDefaultProvider = process.env.PI_DEFAULT_PROVIDER?.trim() || "openrouter";
-  const modelId =
-    modelConfig.id === "scripted"
-      ? envDefaultModel || DEFAULT_OPENROUTER_MODEL_ID
-      : modelConfig.id.trim();
+  const requestedId =
+    modelConfig.id === "scripted" ? envDefaultModel || DEFAULT_OPENROUTER_MODEL_ID : modelConfig.id;
+  const modelId = usableModelId(requestedId) ?? "";
   const models = modelsForRequest({ model: modelConfig }, provider);
   let model = models.getModel(provider, modelId);
   if (!model && provider !== "openrouter" && provider !== OPENAI_COMPATIBLE_PROVIDER_ID) {
@@ -867,6 +870,20 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
           computer_mode: raw.computer_mode ? String(raw.computer_mode) : "",
         };
       }
+      if (tool.name === "update_bot") {
+        const notifyRaw = raw.notifyOnFinish ?? raw.notify_on_finish;
+        return {
+          ...(raw.name !== undefined ? { name: String(raw.name) } : {}),
+          ...(raw.title !== undefined ? { title: String(raw.title) } : {}),
+          ...(raw.description !== undefined ? { description: String(raw.description) } : {}),
+          ...(raw.color !== undefined ? { color: String(raw.color) } : {}),
+          ...(raw.artifact_id !== undefined ? { artifact_id: String(raw.artifact_id) } : {}),
+          ...(raw.use_attached_image !== undefined
+            ? { use_attached_image: raw.use_attached_image }
+            : {}),
+          ...(notifyRaw !== undefined ? { notifyOnFinish: notifyRaw } : {}),
+        };
+      }
       if (tool.name === "create_space") {
         return { name: String(raw.name ?? "") };
       }
@@ -1097,7 +1114,10 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
       ),
     getApiKey: async () => selectedModel.apiKey,
     transformContext: async (messages) =>
-      pruneComputerScreenshotContext(messages, requestModel.maxImagesPerPrompt),
+      pruneComputerScreenshotContext(
+        pruneStalePageStateContext(messages),
+        requestModel.maxImagesPerPrompt,
+      ),
     initialState: {
       systemPrompt: [
         `You are a Rakazo subagent named "${name}".`,
@@ -1227,7 +1247,8 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
 /** Build AgentTool.parameters for a connector tool, including OpenAI wire fidelity. */
 export function parametersFor(tool: ConnectorTool) {
   const schema = builtinParameters(tool) ?? safeJsonSchemaParameters(tool);
-  // Type.Union (top-level oneOf/anyOf) serializes without type/properties.
+  // Type.Union (top-level oneOf/anyOf) serializes without type/properties, and
+  // Anthropic rejects a root union, so it is flattened into one object schema.
   // Re-wrap only when needed so Type.Object schemas keep TypeBox Kind metadata.
   if (!openAiToolParametersNeedNormalization(schema)) return schema;
   return Type.Unsafe(
@@ -1297,6 +1318,17 @@ function builtinParameters(tool: ConnectorTool) {
       computer_mode: Type.Optional(Type.Union([Type.Literal("team"), Type.Literal("dedicated")])),
     });
   }
+  if (tool.name === "update_bot") {
+    return Type.Object({
+      name: Type.Optional(Type.String()),
+      title: Type.Optional(Type.String()),
+      description: Type.Optional(Type.String()),
+      color: Type.Optional(Type.String()),
+      artifact_id: Type.Optional(Type.String()),
+      use_attached_image: Type.Optional(Type.Boolean()),
+      notifyOnFinish: Type.Optional(Type.Boolean()),
+    });
+  }
   if (tool.name === "create_space") {
     return Type.Object({ name: Type.String({ minLength: 1, maxLength: 60 }) });
   }
@@ -1307,6 +1339,67 @@ function builtinParameters(tool: ConnectorTool) {
     });
   }
   return undefined;
+}
+
+/**
+ * Tools whose result is a view of the current page or screen. Each new result supersedes the
+ * earlier ones, so older results only cost context: a long browsing run otherwise re-sends every
+ * snapshot it ever took on every model call.
+ */
+const PAGE_STATE_TOOL_NAMES = new Set([
+  "browser_navigate",
+  "browser_snapshot",
+  "browser_act",
+  "computer_observe",
+  "computer_act",
+]);
+const DEFAULT_PAGE_STATE_RESULTS_TO_KEEP = 3;
+/**
+ * Only results that actually carry a page (a snapshot tree, an observation) are worth trimming
+ * or counting. Navigation confirmations, action receipts and errors are a line or two: trimming
+ * them saves nothing, and counting them would push real page state out of the kept set.
+ */
+const STALE_PAGE_STATE_MIN_CHARS = 1_000;
+const STALE_PAGE_STATE_NOTE =
+  "[Earlier page state trimmed to save context. Facts you still need from that page should already be in your notes or tracker; otherwise take a fresh snapshot.]";
+
+/**
+ * Replace all but the most recent large page-state tool results with a short note. Runs on
+ * every request from the untransformed agent history, so the same history always trims the same
+ * way and the cached prompt prefix stays stable up to the newest trimmed result.
+ */
+export function pruneStalePageStateContext(
+  messages: AgentMessage[],
+  keep = DEFAULT_PAGE_STATE_RESULTS_TO_KEEP,
+): AgentMessage[] {
+  let remaining = Math.max(0, Math.floor(keep));
+  let transformed: AgentMessage[] | undefined;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "toolResult" || !PAGE_STATE_TOOL_NAMES.has(message.toolName)) continue;
+    // Failures are diagnostics, not fresh page state, even when their text is large.
+    const returnedError = (message.details as { error?: unknown } | undefined)?.error;
+    if (message.isError || (returnedError !== undefined && returnedError !== null)) continue;
+    if (textLength(message) < STALE_PAGE_STATE_MIN_CHARS) continue;
+    if (remaining > 0) {
+      remaining -= 1;
+      continue;
+    }
+    transformed ??= [...messages];
+    transformed[index] = {
+      ...message,
+      content: [{ type: "text", text: STALE_PAGE_STATE_NOTE }],
+    };
+  }
+  return transformed ?? messages;
+}
+
+function textLength(message: Extract<AgentMessage, { role: "toolResult" }>): number {
+  let total = 0;
+  for (const part of message.content) {
+    if (part.type === "text") total += part.text.length;
+  }
+  return total;
 }
 
 /** Keep recent visual state while respecting an optional model image budget. */
@@ -1400,6 +1493,11 @@ function isAgentToolExecutionResult(result: unknown): result is AgentToolExecuti
 export function jsonSchemaParameters(
   schema: Record<string, unknown>,
 ): ReturnType<typeof Type.Object> {
+  // Keep intersections intact until parametersFor flattens root combinators.
+  // Rebuilding only properties here drops allOf-only fields and their constraints.
+  if (Array.isArray(schema.allOf)) {
+    return Type.Unsafe(schema) as unknown as ReturnType<typeof Type.Object>;
+  }
   // Top-level oneOf/anyOf (e.g. request_secret's credential XOR connectionId)
   // must stay a union. Falling through to properties would drop the exclusivity
   // and re-expose both destinations as optional siblings.

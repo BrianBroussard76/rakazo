@@ -41,6 +41,7 @@ import {
   computerSupportsUpdate,
   computerUpdateView,
   createVoiceProvider,
+  defaultCatalogModelId,
   deletePushToken,
   deploymentAutoReviewDefault,
   destroyBot,
@@ -57,6 +58,7 @@ import {
   McpOAuthBroker,
   mapScratchpadItem,
   modelCredentialDto,
+  pickReusableConnection,
   planLiveConnectionSync,
   prepareApiInstall,
   prepareGraphqlInstall,
@@ -85,6 +87,7 @@ import {
   appContract,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
+  usableModelId,
 } from "@rakazo/contracts";
 import {
   ACTIVE_RUN_STATUSES,
@@ -3359,6 +3362,28 @@ export function createRouter(deps: RouterDeps) {
         // row that is inserted after SELECT FOR UPDATE and before remote revoke.
         const row = await deps.prisma.$transaction(async (tx) => {
           await lockProviderConnectionScope(tx, context.actor, input.connectorId, input.provider);
+          const existing = await tx.connection.findMany({
+            where: {
+              spaceId: context.actor.spaceId,
+              userId: context.actor.userId,
+              connectorId: input.connectorId,
+              provider: input.provider,
+            },
+            select: { id: true, status: true },
+            orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+          });
+          const reusable = pickReusableConnection(existing);
+          if (reusable) {
+            return tx.connection.update({
+              where: { id: reusable.id },
+              data: {
+                displayName: input.displayName,
+                status: "pending",
+                providerRef: null,
+                metadata: {},
+              },
+            });
+          }
           return tx.connection.create({
             data: {
               spaceId: context.actor.spaceId,
@@ -4782,6 +4807,7 @@ async function spaceNavigationDto(
           (membership.space.deletingAt === null || membership.space.deletingAt < staleClaimBefore),
         bots: spaceBots.map((bot) => ({
           id: bot.id,
+          parentBotId: bot.parentBotId,
           spaceId: bot.spaceId,
           name: bot.name,
           title: bot.title,
@@ -5139,7 +5165,10 @@ async function persistModelCredential(
               },
             });
         throwIfAborted(input.signal);
-        const defaultModel = input.modelId ?? deps.env.defaultModel;
+        const defaultModel =
+          usableModelId(input.modelId) ??
+          defaultCatalogModelId(input.provider) ??
+          usableModelId(deps.env.defaultModel);
         await selectSpaceModelPreference(tx, actor, credential.id, defaultModel);
         throwIfAborted(input.signal);
         if (existing) {
